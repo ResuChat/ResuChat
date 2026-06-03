@@ -1,0 +1,25 @@
+{
+  "name": "resuchat",
+  "private": true,
+  "version": "1.0.0",
+  "description": "对话式简历审批工具 - Conversational Resume Review & Approval Tool",
+  "scripts": {
+    "dev:server": "pnpm --filter @resuchat/server dev",
+    "dev:web": "pnpm --filter @resuchat/web dev",
+    "dev": "pnpm run dev:server & pnpm run dev:web",
+    "build:server": "pnpm --filter @resuchat/server build",
+    "build:web": "pnpm --filter @resuchat/web build",
+    "build": "pnpm run build:server && pnpm run build:web",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "canvas",
+      "esbuild",
+      "onnxruntime-node",
+      "sharp"
+    ]
+  }
+}

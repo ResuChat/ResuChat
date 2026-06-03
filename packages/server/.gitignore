@@ -1,0 +1,7 @@
+.env
+docs
+node_modules/
+dist/
+data/
+uploads/
+temp/

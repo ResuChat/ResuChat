@@ -1,0 +1,9 @@
+{
+  "extends": [
+    "stylelint-config-standard",
+    "stylelint-config-recommended-less"
+  ],
+  "rules": {
+    "less/at-rule-require-no-newline-after-block": true
+  }
+}
