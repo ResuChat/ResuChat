@@ -1,6 +1,8 @@
 # 数据库文档
 
 > 基于 `packages/server/src/db/schema.ts`，文档日期：2026-06-11
+>
+> 项目许可：AGPL-3.0-only
 
 ## 1. 数据模型概览
 

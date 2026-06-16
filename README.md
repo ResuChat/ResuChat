@@ -1,20 +1,60 @@
 # ResuChat
 
-对话式 AI 简历优化助手。项目采用 `pnpm workspace` Monorepo，包含：
+ResuChat 是一个对话式 AI 简历优化系统。用户上传简历后，通过多轮 AI 对话对简历内容进行逐项优化，支持智能修改建议、一键采纳/拒绝、版本管理和 PDF 导出。项目还提供用户文档库和系统知识库（RAG）能力，适用于求职辅导、简历润色等场景。
 
-- `packages/server`: Express + Drizzle ORM + PostgreSQL + LanceDB
-- `packages/web`: Vue 3 + Vite + Element Plus + Tailwind CSS v4
+## 功能
+
+| 功能 | 说明 |
+| ---- | ---- |
+| 对话式简历优化 | 通过 AI 对话对简历进行逐项修改，支持多轮迭代 |
+| 简历解析与展示 | 上传 PDF / DOCX / Markdown / TXT 简历，自动提取文本并展示，支持 PDF 预览 |
+| 智能修改建议 | AI 对简历片段生成修改建议，支持一键采纳或拒绝 |
+| 文档库管理 | 用户可上传和管理多个简历/职位描述文档，跨会话复用 |
+| 系统知识库 | 管理员上传分组文档，全局 RAG 检索增强 AI 回答 |
+| PDF 导出 | 修改完成后一键导出优化后的简历 PDF |
+| 会话管理 | 多会话独立上下文，支持历史会话检索和继续编辑 |
+| 多用户与角色 | 支持 normal / premium / admin 三种角色，精细权限控制 |
 
 ## 仓库结构
 
 ```text
 resuchat/
-├─ packages/
-│  ├─ server/   后端 API、认证、文档处理、RAG、消息持久化
-│  └─ web/      前端页面、聊天面板、PDF 预览、队列与文档引用交互
-├─ AGENTS.md    项目协作文档
-├─ CLAUDE.md    项目实现说明
-└─ pnpm-workspace.yaml
+├── docker/                        # Docker 部署配置
+├── packages/                      # 子包目录
+│   ├── server/                    # 后端 API、认证、文档处理、RAG、消息持久化
+│   │   ├── src/
+│   │   │   ├── routes/            # 路由定义
+│   │   │   ├── controllers/       # 请求入参与响应封装
+│   │   │   ├── services/          # 业务逻辑（chat / document）
+│   │   │   ├── middleware/        # 认证、鉴权、上传、校验
+│   │   │   ├── storage/           # Drizzle 数据访问
+│   │   │   ├── lib/               # 工具库（ai / document / pdf）
+│   │   │   ├── dto/               # 请求/响应类型
+│   │   │   ├── db/                # Drizzle schema 与 client
+│   │   │   ├── workers/           # BullMQ worker
+│   │   │   └── types/             # 类型定义
+│   │   ├── test/                  # Vitest 测试
+│   │   ├── scripts/               # 运维脚本
+│   │   └── .env.example           # 环境变量模板
+│   ├── web/                       # 前端页面、聊天面板、PDF 预览、文档引用交互
+│   │   ├── src/
+│   │   │   ├── pages/             # 页面组件
+│   │   │   ├── components/        # 功能组件（chat / editor / sidebar / suggestion）
+│   │   │   ├── composables/       # Vue 组合式逻辑
+│   │   │   ├── stores/            # Pinia 状态管理
+│   │   │   ├── api/               # HTTP 客户端
+│   │   │   └── lib/               # 工具函数
+│   │   ├── public/                # 静态资源（PDF.js worker、字体映射）
+│   │   └── tests/                 # 前端测试
+│   └── shared/                    # 前后端共享类型与 API 定义
+│       └── src/
+│           ├── domain/            # 领域模型
+│           └── api/               # 接口类型
+├── scripts/                       # 通用运维脚本
+├── LICENSE                        # AGPL-3.0 许可
+├── package.json
+├── pnpm-workspace.yaml            # pnpm 工作区定义
+└── tsconfig.base.json             # 共享 TypeScript 配置
 ```
 
 ## 技术栈
@@ -23,7 +63,7 @@ resuchat/
 | ---- | --------------------------------------------------------------------------------- |
 | 前端 | Vue 3.5、TypeScript、Pinia、Vue Router、Element Plus、Tailwind CSS v4、pdfjs-dist |
 | 后端 | Express 5、TypeScript、Drizzle ORM、PostgreSQL、Redis、BullMQ、WebSocket          |
-| AI   | AI SDK v6、LangChain、DeepSeek、HuggingFace Transformers                          |
+| AI   | Vercel AI SDK v6、LangChain、DeepSeek、HuggingFace Transformers                          |
 | 存储 | PostgreSQL、LanceDB、本地文件系统                                                 |
 
 ## 根命令
@@ -100,36 +140,8 @@ docker compose -f docker/compose.yml up --build
 | `GET`  | `/admin/system-documents`       | 系统知识库管理                       |
 | `GET`  | `/admin/system-document-groups` | 系统知识库分组                       |
 
-## 当前实现要点
-
-- 聊天搜索请求以 `query` 为准，后端不再依赖前端传整段 `messages`。
-- 仅附带文件或引用文档时，前端会兜底生成查询词，保证搜索请求总有 `query`。
-- 用户消息附件会持久化到 `messages.attachments`，消息气泡显示本次发送携带的参考资料。
-- 参考资料面板只展示后端已绑定到当前会话的参考资料列表，不对上传或文档库引用做乐观更新。
-- 从文档库引用参考资料时，面板优先展示用户文档名称，缺失时回退会话引用名或原始文件名。
-- SSE 中断采用所见即所得策略：客户端断开时，消息立即按当前已产出内容落库并标记 `interrupted`，不做后台继续跑的兜底。
-- 服务启动时会主动预热 embedding；系统知识库向量 schema 检测和重建不放在运行时自动执行，版本升级后通过 `pnpm --filter @resuchat/server run vector:check-system` 检查，需要时运行 `pnpm --filter @resuchat/server run vector:rebuild-system`。
-- 系统知识库由管理员维护分组并上传文档，解析、分类和向量化通过 BullMQ worker 异步完成，LanceDB 仅用于系统知识库检索。
-
-## 测试
-
-前端测试位于 `packages/web/src/tests`，已按主题拆分。
-
-后端测试位于 `packages/server/test`，已按主题拆分，包括：
-
-- `api-http.test.ts`
-- `chunk-classification.test.ts`
-- `conversation-storage.test.ts`
-- `stream-persistence.test.ts`
-- `search-execution.test.ts`
-- `text.test.ts`
-- `url.test.ts`
-- `validate-middleware.test.ts`
-
 ## 进一步阅读
 
-- [AGENTS.md](AGENTS.md)
-- [CLAUDE.md](CLAUDE.md)
 - [packages/server/README.md](packages/server/README.md)
 - [packages/server/DATABASE.md](packages/server/DATABASE.md)
 - [packages/web/README.md](packages/web/README.md)

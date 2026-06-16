@@ -3,12 +3,25 @@
 ResuChat 后端，负责认证、会话、聊天搜索、修改应用、文档管理和系统级 RAG。
 当前仍是一个 Express 服务；BullMQ worker 可作为独立进程运行，用于文档解析、系统知识库索引、邮件发送等异步任务。
 
+## 功能
+
+| 功能 | 说明 |
+| ---- | ---- |
+| 对话式简历优化 | AI 驱动的多轮对话简历逐项修改 |
+| 简历解析 | PDF / 图片简历自动文本提取与结构化 |
+| 智能修改建议 | LLM 生成结构化修改建议，支持预览/采纳/拒绝 |
+| 文档库 | 用户独立文档管理，跨会话复用简历与职位描述 |
+| 系统知识库 | 管理员分组管理，LanceDB 向量检索增强 AI 回答 |
+| PDF 导出 | 修改后一键生成格式化简历 PDF |
+| 消息持久化 | SSE 流式写入，中断时按已产出内容立即落库 |
+| WebSocket | 实时推送会话状态与文档解析进度 |
+
 ## 技术栈
 
 - Express 5
 - TypeScript
 - Drizzle ORM + PostgreSQL
-- AI SDK v6 + LangChain
+- Vercel AI SDK v6 + LangChain
 - DeepSeek
 - LanceDB
 - Redis
@@ -181,19 +194,6 @@ pnpm db:views
 | `PATCH`  | `/admin/system-document-groups/:id` | 更新分组         |
 | `DELETE` | `/admin/system-document-groups/:id` | 删除分组         |
 
-## 当前实现说明
-
-- 服务启动时会执行：
-  - `warmupEmbedding()`
-- 系统知识库向量 schema 检测和重建属于运维动作，不在 server/worker 启动或索引任务运行时自动执行；版本升级后先跑 `pnpm run vector:check-system`，需要时跑 `pnpm run vector:rebuild-system`。
-- BullMQ worker 负责用户文档解析、系统知识库入库、邮件发送和 PDF 生成等异步任务。
-- 系统知识库文档走 LanceDB 检索，上传后由 worker 解析、LLM 分类、Markdown 格式化并写入向量库。
-- 会话级简历和参考文件不做向量检索，直接按全文进入 prompt。
-- 搜索请求不再依赖前端传 `messages`，后端自行读取最近消息上下文。
-- 用户消息附件持久化在 `messages.attachments`，用于恢复消息气泡上的参考资料信息。
-- 会话参考资料列表读取 `conversation_document_refs`，文档库来源存在时优先显示 `user_documents.local_name`，否则回退会话引用显示名或原始文件名。
-- SSE 中断时，消息立即按当前可见内容持久化为 `interrupted`。
-
 ## 测试说明
 
 已经拆分的测试主题：
@@ -205,3 +205,7 @@ pnpm db:views
 - 文本工具函数、URL 校验、中间件校验
 
 数据库相关测试需要可用的 PostgreSQL 测试环境。
+
+## 许可
+
+AGPL-3.0-only. 详见项目根目录 [LICENSE](../../LICENSE)。
