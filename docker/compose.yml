@@ -1,0 +1,84 @@
+name: resuchat
+
+services:
+  postgres:
+    image: docker.m.daocloud.io/library/postgres:17-alpine
+    environment:
+      POSTGRES_DB: resuchat
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d resuchat']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: server
+    environment:
+      PORT: 3000
+      BIND_ADDRESS: 0.0.0.0
+      DATABASE_URL: postgresql://postgres@postgres:5432/resuchat
+      USE_REDIS: 'true'
+      REDIS_URL: redis://redis:6379
+      ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      JWT_SECRET: ${JWT_SECRET:-resuchat-dev-secret}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      EMBED_REMOTE_HOST: ${EMBED_REMOTE_HOST:-https://hf-mirror.com}
+    ports:
+      - '3000:3000'
+    command: ['sh', '-c', 'pnpm run db:push && node dist/index.js']
+    volumes:
+      - server-uploads:/app/packages/server/uploads
+      - vector-data:/app/packages/server/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: server
+    command: ['sh', '-c', 'pnpm run db:push && node dist/workers/index.js']
+    environment:
+      DATABASE_URL: postgresql://postgres@postgres:5432/resuchat
+      USE_REDIS: 'true'
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-resuchat-dev-secret}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      EMBED_REMOTE_HOST: ${EMBED_REMOTE_HOST:-https://hf-mirror.com}
+    volumes:
+      - server-uploads:/app/packages/server/uploads
+      - vector-data:/app/packages/server/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:
+  server-uploads:
+  vector-data:

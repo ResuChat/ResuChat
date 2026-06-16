@@ -3,3 +3,16 @@ dist/
 .DS_Store
 *.local
 .env
+*.tsbuildinfo
+.vite/
+.turbo/
+data/
+logs/
+dump.rdb
+packages/server/src/generated/
+packages/server/temp/
+packages/server/uploads/
+packages/server/logs/
+CLAUDE.md
+.claude
+.codex

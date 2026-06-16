@@ -1,29 +1,50 @@
-import express, { Express, Request, Response, Router } from 'express'
+import 'dotenv/config'
+import express, { Express, Request, Response } from 'express'
 import cors from 'cors'
-import dotenv from 'dotenv'
-import multer from 'multer'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import path from 'path'
-import routeConfig from './routes'
-import { closeDatabase } from './storage/database'
-import { tokenCleanupInterval } from './auth/token'
-import { captchaCleanupInterval } from './auth/captcha'
+import authRoute from './routes/auth'
+import userRoute from './routes/user'
+import conversationRoute from './routes/conversation'
+import adminRoute from './routes/admin'
+import chatRoute from './routes/chat'
+import documentsRoute from './routes/documents'
+import modifyRoute from './routes/modify'
+import userDocumentsRoute from './routes/user-documents'
+import { closeDb } from './lib/db'
+import { AppError } from './lib/errors'
+import {
+  ALLOWED_ORIGINS,
+  BIND_ADDRESS,
+  BODY_LIMIT,
+  PORT,
+  SHUTDOWN_TIMEOUT,
+  START_WORKER_IN_SERVER
+} from './lib/config'
+import { tokenCleanupInterval } from './services/auth.service'
+import { captchaCleanupInterval } from './services/captcha.service'
+import { emailCleanupInterval } from './services/email.service'
+import { closeWebSocketServer, initWebSocket } from './services/ws.service'
+import { warmupEmbedding } from './lib/ai/providers'
+import { closeRedis } from './lib/redis'
+import { closeQueues } from './lib/queue'
+import { httpLogger, logger } from './lib/logger'
 
-dotenv.config()
+type BlockingStdout = NodeJS.WriteStream & {
+  _handle?: {
+    setBlocking(blocking: boolean): void
+  }
+}
 
 // 强制 stdout 无缓冲（Windows 上 console.log 输出不刷新的问题）
 if (process.stdout.isTTY) {
-  ;(process.stdout as any)._handle?.setBlocking(true)
+  ;(process.stdout as BlockingStdout)._handle?.setBlocking(true)
 }
 
 const app: Express = express()
-const port = process.env.PORT || 3000
 
-const upload = multer({ storage: multer.memoryStorage() })
-
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim())
-  : ['http://localhost:5173', 'http://127.0.0.1:5173']
-
+app.use(helmet())
 app.use(
   cors({
     origin: (
@@ -32,10 +53,10 @@ app.use(
     ) => {
       if (!origin) return callback(null, true)
       if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
-      console.warn(`[CORS] Blocked origin: ${origin}`)
+      logger.warn('CORS origin blocked', { origin })
       return callback(null, false)
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
@@ -47,83 +68,149 @@ app.use(
     credentials: true
   })
 )
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// 生产环境建议移除或限制此静态文件服务，结合路径遍历漏洞可导致攻击
-// app.use("/files", express.static(path.join(process.cwd(), "temp")));
-
-app.use((req: Request, res: Response, next) => {
-  const start = Date.now()
-  res.on('finish', () => {
-    const duration = Date.now() - start
-    console.log(
-      `[${new Date().toISOString()}] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`
-    )
-  })
-  next()
+// 认证端点速率限制
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '请求过于频繁，请稍后再试' }
 })
+app.use('/auth/login', authLimiter)
+app.use('/auth/register', authLimiter)
+app.use('/auth/send-email-code', authLimiter)
+
+app.use(express.json({ limit: BODY_LIMIT }))
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }))
+
+// 静态文件服务：头像
+app.use('/avatars', express.static(path.join(process.cwd(), 'uploads', 'avatars')))
+
+app.use(httpLogger)
 
 app.get('/', (req: Request, res: Response) => {
   res.json({ message: 'AI Agent BFF Layer Running' })
 })
 
-type RouteItem = {
-  group?: string
-  name?: string
-  path?: string
-  handler?: Router
-  children?: RouteItem[]
-}
-
-function registerRoutes(routes: RouteItem[], basePath: string = '') {
-  for (const route of routes) {
-    const currentPath = route.group ? `${basePath}/${route.group}` : basePath
-
-    if (route.handler && route.name) {
-      app.use(`${currentPath}/${route.name}`, route.handler)
-    } else if (route.children) {
-      registerRoutes(route.children, currentPath)
-    }
-  }
-}
-
-registerRoutes(routeConfig)
+app.use('/admin', adminRoute)
+app.use('/auth', authRoute)
+app.use('/user', userRoute)
+app.use('/conversations', conversationRoute)
+app.use('/chat', chatRoute)
+app.use('/documents', documentsRoute)
+app.use('/user-documents', userDocumentsRoute)
+app.use('/modify', modifyRoute)
 
 // 全局错误处理中间件
-app.use((err: Error, _req: Request, res: Response, _next: any) => {
-  console.error('Unhandled error:', err)
+app.use((err: Error, _req: Request, res: Response, _next: express.NextFunction) => {
+  if (err instanceof AppError) {
+    if (err.statusCode >= 500) {
+      logger.error('Unhandled app error', { error: err, statusCode: err.statusCode })
+    }
+    res.status(err.statusCode).json({
+      error: err.expose ? err.message : 'Internal server error'
+    })
+    return
+  }
+  logger.error('Unhandled error', { error: err })
   res.status(500).json({ error: 'Internal server error' })
 })
 
-console.log('Routes registered, about to listen...')
+logger.info('Routes registered')
 
-async function start() {
-  const server = app.listen(Number(port), '127.0.0.1', () => {
-    console.log(`Server running on http://127.0.0.1:${port}`)
+async function runShutdownStep(name: string, action: () => Promise<void>): Promise<void> {
+  logger.info('Shutdown step started', { step: name })
+  await action()
+  logger.info('Shutdown step completed', { step: name })
+}
+
+export async function start() {
+  let closeInProcessWorkers: (() => Promise<void>) | null = null
+  const server = app.listen(PORT, BIND_ADDRESS)
+
+  await new Promise<void>((resolve, reject) => {
+    const onListening = () => {
+      server.off('error', onError)
+      logger.info('Server started', { address: BIND_ADDRESS, port: PORT })
+      resolve()
+    }
+    const onError = (error: Error) => {
+      server.off('listening', onListening)
+      reject(error)
+    }
+
+    server.once('listening', onListening)
+    server.once('error', onError)
   })
 
-  function gracefulShutdown(signal: string) {
-    console.log(`\nReceived ${signal}, shutting down gracefully...`)
-    clearInterval(tokenCleanupInterval)
-    clearInterval(captchaCleanupInterval)
-    closeDatabase()
-    server.close(() => {
-      console.log('HTTP server closed')
-      process.exit(0)
-    })
-    setTimeout(() => {
-      console.error('Forced shutdown after timeout')
-      process.exit(1)
-    }, 10000).unref()
+  server.on('error', (error) => {
+    logger.error('HTTP server error', { error })
+  })
+
+  initWebSocket(server)
+
+  if (START_WORKER_IN_SERVER) {
+    const workerModule = await import('./workers/index')
+    await workerModule.startWorkers()
+    closeInProcessWorkers = () => workerModule.closeWorkers(true)
+    logger.info('In-process queue workers started')
   }
 
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+  // 预加载嵌入模型，避免首次请求阻塞
+  warmupEmbedding().catch((error) => logger.error('Embedding preload failed', { error }))
+
+  let shuttingDown = false
+  async function gracefulShutdown(signal: string) {
+    if (shuttingDown) return
+    shuttingDown = true
+    logger.info('Shutdown signal received', { signal })
+    clearInterval(tokenCleanupInterval)
+    clearInterval(captchaCleanupInterval)
+    if (emailCleanupInterval) clearInterval(emailCleanupInterval)
+
+    const forceExit = setTimeout(() => {
+      logger.error('Forced shutdown after timeout', { timeoutMs: SHUTDOWN_TIMEOUT })
+      process.exit(1)
+    }, SHUTDOWN_TIMEOUT).unref()
+
+    try {
+      await runShutdownStep('websocket', closeWebSocketServer)
+      await runShutdownStep('http', async () => {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error) reject(error)
+            else resolve()
+          })
+        })
+      })
+      if (closeInProcessWorkers) {
+        await runShutdownStep('workers', closeInProcessWorkers)
+      }
+      await runShutdownStep('queue', closeQueues)
+      await runShutdownStep('redis', closeRedis)
+      await runShutdownStep('db', closeDb)
+      clearTimeout(forceExit)
+      logger.info('Shutdown completed')
+      process.exit(0)
+    } catch (error) {
+      clearTimeout(forceExit)
+      logger.error('Graceful shutdown failed', { error })
+      process.exit(1)
+    }
+  }
+
+  process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'))
+  process.on('SIGINT', () => void gracefulShutdown('SIGINT'))
+
+  return server
 }
-start().catch((err) => {
-  console.error('Fatal startup error:', err)
-  process.exit(1)
-})
+
+if (process.env.VITEST !== 'true') {
+  start().catch((err) => {
+    logger.error('Fatal startup error', { error: err })
+    process.exit(1)
+  })
+}
 
 export default app

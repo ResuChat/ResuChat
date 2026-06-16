@@ -1,103 +1,135 @@
-# ResuChat 🎯
+# ResuChat
 
-> 对话式简历审批工具 · Conversational Resume Review & Approval Tool
+对话式 AI 简历优化助手。项目采用 `pnpm workspace` Monorepo，包含：
 
-基于 AI 大模型的智能简历审批系统，通过对话交互完成简历上传、AI 分析、优化建议、修改审批的全流程。
+- `packages/server`: Express + Drizzle ORM + PostgreSQL + LanceDB
+- `packages/web`: Vue 3 + Vite + Element Plus + Tailwind CSS v4
 
-## 项目结构
+## 仓库结构
 
-```
+```text
 resuchat/
-├── packages/
-│   ├── server/        # @resuchat/server — 后端服务
-│   │   ├── src/
-│   │   │   ├── auth/          # 手机号 + 验证码登录
-│   │   │   ├── lib/           # AI SDK、向量数据库、文档处理
-│   │   │   ├── routes/        # API 路由（RAG 对话 / 管理）
-│   │   │   └── storage/       # SQLite + 文件存储
-│   │   ├── fonts/             # PDF 中文字体
-│   │   └── test/              # Vitest 测试
-│   └── web/           # @resuchat/web — 前端界面
-│       └── src/
-│           ├── pages/         # 登录 / 对话列表 / 编辑器
-│           ├── components/    # 聊天面板、PDF 预览、修改审核
-│           ├── composables/   # AI 对话、消息队列、历史管理
-│           └── stores/        # Pinia 状态管理
-└── pnpm-workspace.yaml
+├─ packages/
+│  ├─ server/   后端 API、认证、文档处理、RAG、消息持久化
+│  └─ web/      前端页面、聊天面板、PDF 预览、队列与文档引用交互
+├─ AGENTS.md    项目协作文档
+├─ CLAUDE.md    项目实现说明
+└─ pnpm-workspace.yaml
 ```
 
 ## 技术栈
 
-| 层 | 技术 |
-|---|---|
-| **后端框架** | Express 5 + TypeScript |
-| **前端框架** | Vue 3.5 + TypeScript |
-| **UI 库** | Element Plus 2 + Tailwind CSS 4 |
-| **AI SDK** | Vercel AI SDK v6 (`@ai-sdk/deepseek` + `@ai-sdk/vue`) |
-| **语言模型** | DeepSeek（流式对话 + 工具调用） |
-| **嵌入模型** | BGE-small-zh-v1.5（本地 HuggingFace，零外部调用） |
-| **向量数据库** | LanceDB（ANN IVF_PQ 索引） |
-| **关系数据库** | SQLite（better-sqlite3） |
-| **文档处理** | PDF 解析/生成、DOCX 解析（pdf-parse, pdfmake, mammoth） |
-| **缓存** | Redis + 内存 LRU fallback |
+| 层   | 技术                                                                              |
+| ---- | --------------------------------------------------------------------------------- |
+| 前端 | Vue 3.5、TypeScript、Pinia、Vue Router、Element Plus、Tailwind CSS v4、pdfjs-dist |
+| 后端 | Express 5、TypeScript、Drizzle ORM、PostgreSQL、Redis、BullMQ、WebSocket          |
+| AI   | AI SDK v6、LangChain、DeepSeek、HuggingFace Transformers                          |
+| 存储 | PostgreSQL、LanceDB、本地文件系统                                                 |
 
-## 核心功能
-
-- **智能对话审批** — 与 AI 对话式地分析和优化简历
-- **RAG 增强检索** — 基于系统知识库的向量检索增强生成
-- **流式推理展示** — 实时展示 AI 推理过程和优化建议
-- **双工具系统** — 优化建议 + 具体修改，分步可控
-- **简历 PDF 生成** — 修改后一键导出 PDF
-- **修改审核** — 接受/补充/拒绝 AI 提出的修改
-
-## 快速开始
-
-### 前置要求
-
-- Node.js >= 20
-- pnpm >= 9
-- DeepSeek API key
-
-### 安装与启动
+## 根命令
 
 ```bash
-# 1. 安装依赖
 pnpm install
-
-# 2. 配置环境变量
-cp packages/server/.env.dev packages/server/.env
-# 编辑 packages/server/.env，填入 DEEPSEEK_API_KEY
-
-# 3. 启动后端（端口 3000）
 pnpm dev:server
-
-# 4. 新终端，启动前端（端口 5173，自动代理 /api → :3000）
+pnpm dev:worker
 pnpm dev:web
-
-# 或者同时启动
-pnpm dev
+pnpm build
+pnpm lint
+pnpm format
+pnpm test
+pnpm typecheck
 ```
 
-### 构建 & 测试
+说明：
+
+- `pnpm test` 运行工作区 Vitest。
+- `pnpm typecheck` 会对前后端分别执行 `tsc --noEmit`。
+- 开发服务按需单独启动：`pnpm dev:server`、`pnpm dev:web`、`pnpm dev:worker`。
+- 系统知识库上传后的分类与向量化依赖 worker 消费队列。
+
+## Docker
+
+Docker 配置集中在 [docker](docker) 目录：
 
 ```bash
-pnpm build           # 构建所有包
-pnpm test            # 运行所有测试
-pnpm lint            # 代码检查
+docker compose -f docker/compose.yml up --build
 ```
 
-## 架构示意
+## 环境变量
 
-```
-[浏览器] ──:5173──> [Vite 代理] ── /api ──> [Express :3000]
-                                                │
-                     ┌──────────────────────────┼──────────────────────────┐
-                     ▼                          ▼                          ▼
-               [SQLite]                   [LanceDB]                [DeepSeek API]
-          用户/会话/消息              系统文档向量索引             流式对话 + 工具
-```
+至少需要：
 
-## 各包文档
+- `JWT_SECRET`
+- `DEEPSEEK_API_KEY`
+- `DATABASE_URL`
 
-- [服务端文档](packages/server/README.md)
-- [前端文档](packages/web/README.md)
+常用可选项：
+
+- `PORT`，默认 `3000`
+- `ALLOWED_ORIGINS`，逗号分隔的 CORS 白名单
+- `USE_REDIS`、`REDIS_HOST`、`REDIS_PORT`
+- `SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASS`
+
+## 当前前端路由
+
+| 路径                    | 页面                            |
+| ----------------------- | ------------------------------- |
+| `/`                     | `LoginPage`                     |
+| `/app/chat`             | `NewChatPage`                   |
+| `/app/chat/:id`         | `EditorPage`                    |
+| `/app/conversations`    | `SearchConversationsPage`       |
+| `/app/documents`        | `DocumentLibraryPage`           |
+| `/app/system-knowledge` | `SystemKnowledgePage`，仅管理员 |
+
+## 当前后端主接口
+
+| 方法   | 路径                            | 说明                                 |
+| ------ | ------------------------------- | ------------------------------------ |
+| `POST` | `/auth/register`                | 邮箱注册                             |
+| `POST` | `/auth/login`                   | 手机密码 / 邮箱密码 / 邮箱验证码登录 |
+| `POST` | `/auth/refresh`                 | 刷新 token                           |
+| `POST` | `/auth/logout`                  | 退出登录                             |
+| `GET`  | `/user/profile`                 | 当前用户信息                         |
+| `GET`  | `/conversations`                | 会话列表                             |
+| `POST` | `/conversations/start`          | 上传文件并创建会话                   |
+| `POST` | `/conversations/start-from-doc` | 从已有用户文档创建会话               |
+| `POST` | `/chat/search`                  | 主聊天搜索，SSE 流式返回             |
+| `POST` | `/modify/apply`                 | 应用修改                             |
+| `GET`  | `/documents`                    | 会话文档列表                         |
+| `GET`  | `/user-documents`               | 用户文档库                           |
+| `GET`  | `/admin/system-documents`       | 系统知识库管理                       |
+| `GET`  | `/admin/system-document-groups` | 系统知识库分组                       |
+
+## 当前实现要点
+
+- 聊天搜索请求以 `query` 为准，后端不再依赖前端传整段 `messages`。
+- 仅附带文件或引用文档时，前端会兜底生成查询词，保证搜索请求总有 `query`。
+- 用户消息附件会持久化到 `messages.attachments`，消息气泡显示本次发送携带的参考资料。
+- 参考资料面板只展示后端已绑定到当前会话的参考资料列表，不对上传或文档库引用做乐观更新。
+- 从文档库引用参考资料时，面板优先展示用户文档名称，缺失时回退会话引用名或原始文件名。
+- SSE 中断采用所见即所得策略：客户端断开时，消息立即按当前已产出内容落库并标记 `interrupted`，不做后台继续跑的兜底。
+- 服务启动时会主动预热 embedding；系统知识库向量 schema 检测和重建不放在运行时自动执行，版本升级后通过 `pnpm --filter @resuchat/server run vector:check-system` 检查，需要时运行 `pnpm --filter @resuchat/server run vector:rebuild-system`。
+- 系统知识库由管理员维护分组并上传文档，解析、分类和向量化通过 BullMQ worker 异步完成，LanceDB 仅用于系统知识库检索。
+
+## 测试
+
+前端测试位于 `packages/web/src/tests`，已按主题拆分。
+
+后端测试位于 `packages/server/test`，已按主题拆分，包括：
+
+- `api-http.test.ts`
+- `chunk-classification.test.ts`
+- `conversation-storage.test.ts`
+- `stream-persistence.test.ts`
+- `search-execution.test.ts`
+- `text.test.ts`
+- `url.test.ts`
+- `validate-middleware.test.ts`
+
+## 进一步阅读
+
+- [AGENTS.md](AGENTS.md)
+- [CLAUDE.md](CLAUDE.md)
+- [packages/server/README.md](packages/server/README.md)
+- [packages/server/DATABASE.md](packages/server/DATABASE.md)
+- [packages/web/README.md](packages/web/README.md)

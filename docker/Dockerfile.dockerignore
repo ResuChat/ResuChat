@@ -1,0 +1,16 @@
+.git
+.github
+.turbo
+.vite
+node_modules
+dist
+coverage
+*.log
+*.local
+.env
+packages/*/node_modules
+packages/*/dist
+packages/server/uploads
+packages/server/temp
+packages/server/src/generated
+data

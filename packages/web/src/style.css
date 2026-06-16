@@ -1,5 +1,118 @@
 @import 'tailwindcss';
 
+:root {
+  /* ── 主色: 孔雀蓝绿 h=195 ── */
+  --primary: oklch(56% 0.145 195deg);
+  --primary-light: oklch(68% 0.125 195deg);
+  --primary-dark: oklch(46% 0.13 198deg);
+  --primary-bg: oklch(56% 0.145 195deg / 8%);
+  --primary-bg-soft: oklch(56% 0.145 195deg / 14%);
+
+  /* ── 侧边栏 ── */
+  --sidebar-bg: oklch(96% 0.025 190deg);
+  --sidebar-border: oklch(86% 0.035 190deg);
+  --sidebar-hover: oklch(90% 0.045 190deg);
+  --sidebar-active: oklch(84% 0.065 193deg);
+  --sidebar-text: oklch(27% 0.025 215deg);
+  --sidebar-text-secondary: oklch(48% 0.018 215deg);
+
+  /* ── 主表面 ── */
+  --bg: oklch(99% 0.003 220deg);
+  --bg-secondary: oklch(96% 0.008 215deg);
+  --surface: oklch(100% 0 0deg);
+  --surface-raised: oklch(98% 0.004 220deg);
+  --surface-muted: oklch(96% 0.008 215deg);
+  --surface-hover: oklch(56% 0.145 195deg / 7%);
+  --control-bg: oklch(100% 0 0deg);
+  --control-hover: oklch(56% 0.145 195deg / 10%);
+  --control-active: oklch(56% 0.145 195deg / 14%);
+  --focus-ring: oklch(56% 0.145 195deg / 18%);
+  --shadow-panel: 0 10px 24px oklch(35% 0.03 220deg / 5%);
+  --radius-panel: 12px;
+  --radius-control: 8px;
+
+  /* ── 聊天 ── */
+  --chat-user-bg: oklch(56% 0.145 195deg / 10%);
+  --chat-assistant-bg: oklch(98% 0.004 220deg);
+  --chat-bubble-user: oklch(56% 0.145 195deg / 15%);
+  --chat-bubble-assistant: oklch(96.5% 0.0025 220deg);
+  --chat-input-bg: oklch(100% 0 0deg);
+  --chat-header-bg: oklch(98% 0.004 220deg);
+  --chat-msg-hover: oklch(95.5% 0.008 215deg);
+
+  /* ── 其他 ── */
+  --pdf-bg: oklch(94% 0.006 220deg);
+  --card-bg: oklch(98% 0.004 220deg);
+  --card-highlight: oklch(56% 0.145 195deg / 9%);
+  --card-warning: oklch(88% 0.12 88deg / 28%);
+  --error-bg: oklch(62% 0.18 25deg / 10%);
+  --border: oklch(88% 0.006 220deg);
+
+  /* ── 文字 ── */
+  --text: oklch(24% 0.018 225deg);
+  --text-secondary: oklch(43% 0.014 225deg);
+  --text-muted: oklch(60% 0.01 225deg);
+}
+
+:root.dark {
+  /* ── 主色: 孔雀蓝绿 h=195 ── */
+  --primary: oklch(72% 0.14 195deg);
+  --primary-light: oklch(80% 0.11 190deg);
+  --primary-dark: oklch(58% 0.135 198deg);
+  --primary-bg: oklch(38% 0.105 195deg / 42%);
+  --primary-bg-soft: oklch(34% 0.085 195deg / 35%);
+
+  /* ── 侧边栏 ── */
+  --sidebar-bg: oklch(21% 0.045 205deg);
+  --sidebar-border: oklch(31% 0.055 205deg);
+  --sidebar-hover: oklch(28% 0.06 202deg);
+  --sidebar-active: oklch(35% 0.085 195deg);
+  --sidebar-text: oklch(92% 0.008 210deg);
+  --sidebar-text-secondary: oklch(68% 0.018 210deg);
+
+  /* ── 主表面 ── */
+  --bg: oklch(17% 0.014 230deg);
+  --bg-secondary: oklch(21% 0.016 228deg);
+  --surface: oklch(22% 0.016 228deg);
+  --surface-raised: oklch(25% 0.018 228deg);
+  --surface-muted: oklch(19% 0.014 230deg);
+  --surface-hover: oklch(72% 0.14 195deg / 10%);
+  --control-bg: oklch(24% 0.018 228deg);
+  --control-hover: oklch(72% 0.14 195deg / 13%);
+  --control-active: oklch(72% 0.14 195deg / 18%);
+  --focus-ring: oklch(72% 0.14 195deg / 20%);
+  --shadow-panel: 0 14px 32px rgb(0 0 0 / 18%);
+  --radius-panel: 12px;
+  --radius-control: 8px;
+
+  /* ── 聊天 ── */
+  --chat-user-bg: oklch(34% 0.085 195deg / 48%);
+  --chat-assistant-bg: oklch(23% 0.016 228deg);
+  --chat-bubble-user: oklch(32% 0.08 195deg);
+  --chat-bubble-assistant: oklch(26.5% 0.018 228deg);
+  --chat-input-bg: oklch(24% 0.018 228deg);
+  --chat-header-bg: oklch(19% 0.014 230deg);
+  --chat-msg-hover: oklch(25% 0.018 228deg);
+
+  /* ── 其他 ── */
+  --pdf-bg: oklch(15% 0.012 230deg);
+  --card-bg: oklch(24% 0.018 228deg);
+  --card-highlight: oklch(36% 0.085 195deg / 35%);
+  --card-warning: oklch(76% 0.12 88deg / 22%);
+  --error-bg: oklch(45% 0.12 25deg / 18%);
+  --border: oklch(31% 0.018 228deg);
+
+  /* ── 文字 ── */
+  --text: oklch(93% 0.006 225deg);
+  --text-secondary: oklch(72% 0.01 225deg);
+  --text-muted: oklch(56% 0.012 225deg);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(68% 0.17 195deg / 20%) transparent;
+}
+
 @layer base {
   * {
     margin: 0;
@@ -12,5 +125,155 @@
   #app {
     height: 100%;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  html.dark .el-dropdown-menu {
+    background: var(--bg-secondary);
+    border-color: var(--border);
+  }
+
+  html.dark .el-dropdown-menu__item:not(.is-disabled):hover {
+    background: oklch(27% 0.003 225deg);
+  }
+
+  /* login/newchat 背景由组件自身管理，暗色下不做覆盖 */
+}
+
+@layer components {
+  .app-page {
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .app-page__inner {
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .surface-panel {
+    border-radius: var(--radius-panel);
+    background: var(--surface);
+    box-shadow: none;
+  }
+
+  .surface-toolbar {
+    border-radius: var(--radius-panel);
+    background: color-mix(in oklab, var(--surface-raised) 82%, var(--primary-bg));
+  }
+
+  .toolbar-icon-btn {
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--text-secondary);
+    transition:
+      background-color 0.18s,
+      color 0.18s,
+      box-shadow 0.18s;
+  }
+
+  .toolbar-icon-btn:hover {
+    background: color-mix(in oklab, var(--control-hover) 72%, transparent);
+    color: var(--primary);
+  }
+
+  .toolbar-icon-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--focus-ring);
+  }
+
+  .suggestion-card {
+    margin-bottom: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--card-bg) 88%, var(--bg));
+    color: var(--text-secondary);
+  }
+
+  .suggestion-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+  }
+
+  .suggestion-card__title {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.45;
+  }
+
+  .suggestion-card__reason {
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .suggestion-card__badge {
+    flex-shrink: 0;
+    max-width: 92px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 999px;
+    padding: 2px 7px;
+    background: var(--primary-bg);
+    color: var(--primary-dark);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .suggestion-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 9px;
+  }
+
+  .suggestion-card__label {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .suggestion-card__block {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 9px;
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: normal;
+  }
+
+  .suggestion-card__block--current {
+    border-color: color-mix(in oklab, oklch(78% 0.13 88deg) 70%, var(--border));
+    background: var(--card-warning);
+  }
+
+  .suggestion-card__block--suggestion {
+    border-color: color-mix(in oklab, var(--primary-light) 70%, var(--border));
+    background: var(--card-highlight);
+  }
+
+  .suggestion-card__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
   }
 }

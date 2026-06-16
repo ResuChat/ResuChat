@@ -1,30 +1,41 @@
-import { describe, it, expect } from 'vitest';
-import { verifyToken, inMemoryTokens } from '../src/auth/token';
+import { beforeEach, describe, expect, it } from 'vitest'
 
-describe('verifyToken', () => {
-  it('should return null for empty token', async () => {
-    const result = await verifyToken('');
-    expect(result).toBeNull();
-  });
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret'
+process.env.DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'test-key'
 
-  it('should return null for undefined token', async () => {
-    const result = await verifyToken(undefined as any);
-    expect(result).toBeNull();
-  });
+const authModule = await import('../src/services/auth.service')
+const { signTokens, verifyAccessToken, rotateRefreshToken, inMemoryRefresh } = authModule
 
-  it('should return username for valid token in memory', async () => {
-    const token = 'test_token_' + Date.now();
-    inMemoryTokens[token] = { username: 'testuser', expires: Date.now() + 86400000 };
-    
-    const result = await verifyToken(token);
-    expect(result).toBe('testuser');
-  });
+describe('auth token helpers', () => {
+  beforeEach(() => {
+    for (const key of Object.keys(inMemoryRefresh)) {
+      delete inMemoryRefresh[key]
+    }
+  })
 
-  it('should return null for expired token', async () => {
-    const token = 'expired_token';
-    inMemoryTokens[token] = { username: 'testuser', expires: Date.now() - 1000 };
-    
-    const result = await verifyToken(token);
-    expect(result).toBeNull();
-  });
-});
+  it('verifyAccessToken should return null for empty token', async () => {
+    const result = await verifyAccessToken('')
+    expect(result).toBeNull()
+  })
+
+  it('verifyAccessToken should return null for malformed token', async () => {
+    const result = await verifyAccessToken('not-a-token')
+    expect(result).toBeNull()
+  })
+
+  it('verifyAccessToken should decode a signed access token', async () => {
+    const tokens = await signTokens('user-1', 'tester')
+    const result = await verifyAccessToken(tokens.accessToken)
+    expect(result?.userId).toBe('user-1')
+    expect(result?.username).toBe('tester')
+  })
+
+  it('rotateRefreshToken should rotate a valid refresh token', async () => {
+    const tokens = await signTokens('user-2', 'tester')
+    const rotated = await rotateRefreshToken(tokens.refreshToken)
+    expect(rotated).not.toBeNull()
+    expect(rotated?.accessToken).toBeTruthy()
+    expect(rotated?.refreshToken).toBeTruthy()
+    expect(rotated?.refreshToken).not.toBe(tokens.refreshToken)
+  })
+})

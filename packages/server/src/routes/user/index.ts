@@ -1,30 +1,23 @@
-import { Router, Request, Response } from 'express'
+import { Router } from 'express'
+import { createAuthWithUserMiddleware } from '../../middleware/auth'
+import { upload } from '../../middleware/upload'
+import { validateBody } from '../../middleware/validate'
+import { UpdateProfileRequest, BindPhoneRequest, ChangePasswordRequest } from '../../dto/user.dto'
+import {
+  profile,
+  update,
+  phoneBind,
+  passwordChange,
+  avatar
+} from '../../controllers/user.controller'
 
-import { createAuthWithUserMiddleware } from '../../auth/token'
-import { getUserByPhone } from '../../storage/repository'
-
+const authenticate = createAuthWithUserMiddleware()
 const router: Router = Router()
-const authWithUser = createAuthWithUserMiddleware()
 
-router.get('/profile', authWithUser, async (req: Request, res: Response) => {
-  try {
-    const phone = (req as any).username?.replace(/^user_/, '')
-    if (!phone) {
-      res.status(401).json({ error: 'Token required' })
-      return
-    }
-
-    const user = await getUserByPhone(phone)
-    if (!user) {
-      res.status(404).json({ error: 'User not found' })
-      return
-    }
-
-    res.json(user)
-  } catch (error) {
-    console.error('Error fetching user profile:', error)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-})
+router.get('/profile', authenticate, profile)
+router.patch('/profile', authenticate, validateBody(UpdateProfileRequest), update)
+router.patch('/bind-phone', authenticate, validateBody(BindPhoneRequest), phoneBind)
+router.patch('/change-password', authenticate, validateBody(ChangePasswordRequest), passwordChange)
+router.post('/avatar', authenticate, upload.single('file'), avatar)
 
 export default router

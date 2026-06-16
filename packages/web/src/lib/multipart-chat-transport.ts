@@ -1,6 +1,7 @@
 import type { ChatTransport, UIMessageChunk, UIMessage } from 'ai'
 import { parseJsonEventStream } from 'ai'
 import { z } from 'zod'
+import { getAccessToken } from '@/lib/auth'
 
 export class MultipartChatTransport<
   UI_MESSAGE extends UIMessage
@@ -28,13 +29,11 @@ export class MultipartChatTransport<
   }): Promise<ReadableStream<UIMessageChunk>> {
     const body = options.body as Record<string, unknown> | undefined
     const api =
-      body?.type === 'apply' || body?.type === 'accept'
-        ? '/api/rag/apply-modification'
-        : '/api/rag/search'
+      body?.type === 'apply' || body?.type === 'accept' ? '/api/modify/apply' : '/api/chat/search'
 
-    const files = (options.body as any)?.files
+    const files = (options.body as unknown as { files: unknown[] })?.files
     const hasFiles = files?.length > 0
-    const token = localStorage.getItem('auth_token')
+    const token = getAccessToken()
     const headers: Record<string, string> = {
       ...(token ? { token } : {})
     }
@@ -45,7 +44,6 @@ export class MultipartChatTransport<
 
     if (hasFiles) {
       const formData = new FormData()
-      formData.append('messages', JSON.stringify(options.messages))
       formData.append('chatId', options.chatId)
       formData.append('trigger', options.trigger)
       if (options.messageId) {

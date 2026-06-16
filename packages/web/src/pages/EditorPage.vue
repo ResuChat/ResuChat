@@ -1,8 +1,6 @@
 <template>
-  <div v-if="loading" class="flex justify-center items-center h-screen bg-[#f5f5f5]">
-    <el-skeleton :rows="8" animated style="width: 60%" />
-  </div>
-  <div v-else-if="error" class="flex justify-center items-center h-screen bg-[#f5f5f5]">
+  <EditorSkeleton v-if="loading" />
+  <div v-else-if="error" class="flex justify-center items-center h-screen">
     <el-result icon="error" title="加载失败" :sub-title="error">
       <template #extra>
         <el-button type="primary" @click="retryLoad"> 重试 </el-button>
@@ -11,10 +9,8 @@
   </div>
   <div v-else class="editor-page">
     <div class="left-panel">
-      <PdfPreview
+      <PdfViewer
         :pdf-url
-        :loading
-        :error
         :versions="docVersions"
         :active-index="activeVersionIdx"
         :current-version="currentVersionLabel"
@@ -22,6 +18,7 @@
         @download="downloadPdf"
         @select-version="switchVersion"
         @restore="handleRestore"
+        @save-to-library="handleSaveToLibrary"
       />
     </div>
 
@@ -52,64 +49,49 @@
         @supplement-modification="handleSupplementModification"
         @reject-modification="handleRejectModification"
         @submit-supplement="handleSubmitSupplement"
+        @cancel-supplement="handleCancelSupplement"
         @stop="handleStop"
-        @toggle-drawer="drawerVisible = true"
-        @go-back="goBack"
         @cancel-request="handleCancelRequest"
         @cancel-all-pending="handleCancelAllPending"
         @reorder-queue="onReorderQueue"
         @toggle-reasoning="onToggleReasoning"
       />
     </div>
-
-    <ConversationDrawer v-model:visible="drawerVisible" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useRoute } from 'vue-router'
 import { generateId } from 'ai'
+import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { useResumeStore } from '@/stores/resume'
-import { deleteReferenceFile } from '@/api'
-import { useRequestQueue } from '@/composables/useRequestQueue'
-import { useEditorPdf } from '@/composables/useEditorPdf'
-import { useEditorHistory } from '@/composables/useEditorHistory'
-import { useEditorChat } from '@/composables/useEditorChat'
-import { useEditorModifications } from '@/composables/useEditorModifications'
-import ConversationDrawer from '@/components/ConversationDrawer.vue'
-import PdfPreview from '@/components/PdfPreview.vue'
-import ChatPanel from '@/components/ChatPanel.vue'
-import type { Message } from '@/types/chat'
-
-const router = useRouter()
+import { api, deleteReferenceFile } from '@/api'
+import { useChatStore } from '@/stores/chat.store'
+import { useRequestQueue } from '@/composables/chat/useQueue'
+import { useEditorPdf } from '@/composables/editor/usePdf'
+import { useEditorHistory } from '@/composables/editor/useHistory'
+import { useEditorChat } from '@/composables/chat/useChat'
+import { useEditorModifications } from '@/composables/editor/useModifications'
+import { resolveSearchQuery, shouldLoadMoreHistory } from '@/lib/chat-page-helpers'
+import PdfViewer from '@/components/editor/PdfViewer.vue'
+import ChatPanel from '@/components/chat/ChatPanel.vue'
+import EditorSkeleton from '@/components/editor/EditorSkeleton.vue'
+import type { Message, MessageAttachment, ModificationItem, OptimizationItem } from '@/types/chat'
 const route = useRoute()
-const resumeStore = useResumeStore()
+const chatStore = useChatStore()
+const { messages } = storeToRefs(chatStore)
 const chatPanelRef = ref<InstanceType<typeof ChatPanel>>()
 const loading = ref(true)
 const error = ref('')
-const drawerVisible = ref(false)
 const conversationId = ref('')
-const messages = ref<Message[]>([])
 const isLoading = ref(false)
 const chatError = ref('')
 const failedMessage = ref('')
 const historyLoading = ref(false)
 const autoScroll = ref(true)
-
-const loadReferenceFilesRef = { value: () => {} }
-const {
-  requestQueue,
-  isProcessing,
-  isSearchProcessing,
-  pendingQueueCount,
-  enqueueRequest,
-  cancelRequest,
-  cancelAllPending,
-  dequeue,
-  onReorderQueue
-} = useRequestQueue({ loadReferenceFilesRef })
+const scrollReady = ref(false)
 
 const {
   pdfUrl,
@@ -124,16 +106,27 @@ const {
   reloadPdfFromServer,
   downloadPdf
 } = useEditorPdf(conversationId, messages, chatPanelRef, autoScroll)
-loadReferenceFilesRef.value = loadReferenceFiles
 
-const { hasMoreHistory, loadMoreHistory, resetHistory } = useEditorHistory(
+const {
+  requestQueue,
+  isProcessing,
+  isSearchProcessing,
+  pendingQueueCount,
+  enqueueRequest,
+  cancelRequest,
+  cancelAllPending,
+  dequeue,
+  onReorderQueue
+} = useRequestQueue({ loadReferenceFiles })
+
+const { hasMoreHistory, loadMoreHistory, resetHistory, allowAutoLoad } = useEditorHistory(
   messages,
   conversationId,
   chatPanelRef,
   historyLoading
 )
 
-const { chat, transport, initChat, showReasoningMap } = useEditorChat({
+const editorChat = useEditorChat({
   conversationId,
   requestQueue,
   dequeue,
@@ -146,6 +139,7 @@ const { chat, transport, initChat, showReasoningMap } = useEditorChat({
   autoScroll,
   chatPanelRef
 })
+const { initChat, showReasoningMap } = editorChat
 
 const {
   disabledOpts,
@@ -155,12 +149,30 @@ const {
   acceptModification,
   supplementModification,
   submitSupplement,
+  cancelSupplement,
   rejectModification,
   cleanupDisabledKeys,
   resetSupplement
 } = useEditorModifications(messages)
 
-function handleApplyOptimization(item: any, idx: number, msgIndex: number, msg: Message) {
+const chatTitle = computed(() => {
+  return chatStore.conversationTitle || chatStore.initialPrompt || '未命名对话'
+})
+
+function retryLoad() {
+  error.value = ''
+  loading.value = true
+  window.location.reload()
+}
+
+function handleApplyOptimization(
+  item: OptimizationItem,
+  idx: number,
+  msgIndex: number,
+  msg: Message
+) {
+  const chat = editorChat.chat.value
+  if (!chat) return
   onApplyOptimization(item, idx, msgIndex, msg, {
     chat,
     conversationId: conversationId.value,
@@ -171,7 +183,10 @@ function handleApplyOptimization(item: any, idx: number, msgIndex: number, msg: 
     chatPanelRef
   })
 }
-function handleAcceptModification(item: any, msgIndex: number, modIdx: number) {
+
+function handleAcceptModification(item: ModificationItem, msgIndex: number, modIdx: number) {
+  const chat = editorChat.chat.value
+  if (!chat) return
   acceptModification(item, msgIndex, modIdx, {
     chat,
     conversationId: conversationId.value,
@@ -180,13 +195,21 @@ function handleAcceptModification(item: any, msgIndex: number, modIdx: number) {
     dequeue
   })
 }
-function handleSupplementModification(item: any, msgIndex: number, modIdx: number) {
+
+function handleSupplementModification(item: ModificationItem, msgIndex: number, modIdx: number) {
   supplementModification(item, msgIndex, modIdx, chatPanelRef)
 }
+
 function handleRejectModification(msgIndex: number, modIdx: number) {
   rejectModification(msgIndex, modIdx)
 }
+
 function handleSubmitSupplement(text: string) {
+  const chat = editorChat.chat.value
+  if (!chat) {
+    cancelSupplement()
+    return
+  }
   submitSupplement(text, {
     chat,
     conversationId: conversationId.value,
@@ -196,21 +219,16 @@ function handleSubmitSupplement(text: string) {
   })
 }
 
-const chatTitle = computed(() => {
-  return resumeStore.conversationTitle || '简历优化助手'
-})
-
-function retryLoad() {
-  error.value = ''
-  loading.value = true
-  window.location.reload()
+function handleCancelSupplement() {
+  cancelSupplement()
 }
 
 function handleStop() {
-  transport.stop()
+  editorChat.transport.stop()
   requestQueue.value = []
   isProcessing.value = false
   isSearchProcessing.value = false
+  void loadReferenceFiles()
   const last = messages.value[messages.value.length - 1]
   if (last?.role === 'assistant' && last.status !== 'interrupted') {
     last.status = 'interrupted'
@@ -232,68 +250,98 @@ function handleCancelAllPending() {
 function onChatScroll(payload: { scrollTop: number; scrollHeight: number; clientHeight: number }) {
   const isNearBottom = payload.scrollHeight - payload.scrollTop - payload.clientHeight < 80
   autoScroll.value = isNearBottom
-  if (!isNearBottom && hasMoreHistory.value && payload.scrollTop < 30) {
+  if (payload.scrollTop > 200) {
+    allowAutoLoad()
+  }
+  if (
+    shouldLoadMoreHistory(payload, {
+      scrollReady: scrollReady.value,
+      hasMoreHistory: hasMoreHistory.value
+    })
+  ) {
     loadMoreHistory()
   }
 }
 
-function onChatSend(text: string, files: File[]) {
-  if (!text.trim() && files.length === 0) return
-  failedMessage.value = text
+function onChatSend(
+  text: string,
+  files: File[],
+  docIds: number[] = [],
+  attachments: MessageAttachment[] = []
+) {
+  const query = resolveSearchQuery(text, {
+    hasFiles: files.length > 0,
+    hasDocs: docIds.length > 0
+  })
+  if (!query) return
+
+  const chat = editorChat.chat.value
+  if (!chat) return
+
+  failedMessage.value = query
   autoScroll.value = true
   isLoading.value = true
 
-  if (files.length > 0) {
-    const optimisticDocs = files.map((f) => ({
-      id: 0,
-      original_name: f.name,
-      file_type: f.name.split('.').pop()?.toLowerCase() || '',
-      file_size: f.size,
-      file_path: '',
-      doc_type: 'reference' as const,
-      version: 0,
-      created_at: Date.now(),
-      ref_category: undefined
-    }))
-    referenceFiles.value = [...optimisticDocs, ...referenceFiles.value]
-  }
-
   const userMsgId = generateId()
   const assistantMsgId = generateId()
+
   enqueueRequest(
     {
       type: 'search',
       execute: () => {
         isLoading.value = true
         supplementCount.value = 0
-        messages.value.push({ id: userMsgId, role: 'user', content: text })
-        chat.messages.push({ id: userMsgId, role: 'user', parts: [{ type: 'text', text }] })
+        messages.value.push({
+          id: userMsgId,
+          role: 'user',
+          content: query,
+          attachments: attachments.length > 0 ? attachments : undefined
+        })
+        chat.messages.push({
+          id: userMsgId,
+          role: 'user',
+          parts: [{ type: 'text', text: query }]
+        })
         chat.sendMessage(
-          { messageId: userMsgId, parts: [{ type: 'text', text }] },
+          { messageId: userMsgId, parts: [{ type: 'text', text: query }] },
           {
             body: {
               type: 'search',
               conversationId: conversationId.value,
-              query: text,
+              query,
               userMsgId,
               assistantMsgId,
-              files: files.length > 0 ? files : undefined
+              files: files.length > 0 ? files : undefined,
+              docIds: docIds.length > 0 ? docIds : undefined
             }
           }
         )
       }
     },
-    { text }
+    { text: query }
   )
 
   chatPanelRef.value?.scrollToBottom()
+}
+
+async function handleSaveToLibrary(refId: number) {
+  try {
+    await api.post('/user-documents/import', { refId })
+    ElMessage.success('已保存到文档库')
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error) && typeof error.response?.data?.error === 'string') {
+      ElMessage.warning(error.response.data.error)
+      return
+    }
+    ElMessage.warning('保存失败')
+  }
 }
 
 async function removeReferenceFile(refId: number) {
   if (!conversationId.value) return
   try {
     await deleteReferenceFile(conversationId.value, refId)
-    referenceFiles.value = referenceFiles.value.filter((d) => d.id !== refId)
+    referenceFiles.value = referenceFiles.value.filter((doc) => doc.id !== refId)
     ElMessage.success('参考资料已删除')
   } catch {
     ElMessage.error('删除失败')
@@ -309,19 +357,17 @@ function retrySend() {
   }
 }
 
-function goBack() {
-  router.push('/conversations')
+function onToggleReasoning(msgId: string) {
+  const current = showReasoningMap.get(msgId) ?? false
+  showReasoningMap.set(msgId, !current)
+  const msg = messages.value.find((item) => item.id === msgId)
+  if (msg) msg.showReasoning = !current
 }
 
-function loadConversationToState(id: string, totalMsgs: number, resetPdf = true) {
+function loadConversationToState(id: string, totalMessages: number) {
   resetSupplement()
   conversationId.value = id
-  resetHistory(totalMsgs)
-  if (resetPdf) {
-    pdfUrl.value = resumeStore.fileBlobUrl
-  } else if (resumeStore.fileBlobUrl) {
-    pdfUrl.value = resumeStore.fileBlobUrl
-  }
+  resetHistory(totalMessages)
   loadReferenceFiles()
   loadDocHistory()
 }
@@ -330,147 +376,125 @@ function autoTriggerSearch(query: string, id: string) {
   isLoading.value = true
   const userMsgId = generateId()
   const assistantMsgId = generateId()
-  enqueueRequest(
-    {
-      type: 'search',
-      execute: () => {
-        chat.messages.push({ id: userMsgId, role: 'user', parts: [{ type: 'text', text: query }] })
-        chat.sendMessage(
-          { messageId: userMsgId, parts: [{ type: 'text', text: query }] },
-          { body: { conversationId: id, query, userMsgId, assistantMsgId } }
-        )
-      }
-    },
-    { text: query }
-  )
+
+  function doSend() {
+    const chat = editorChat.chat.value
+    if (!chat?.messages) {
+      setTimeout(doSend, 10)
+      return
+    }
+    chat.messages.push({ id: userMsgId, role: 'user', parts: [{ type: 'text', text: query }] })
+    chat.sendMessage(
+      { messageId: userMsgId, parts: [{ type: 'text', text: query }] },
+      { body: { conversationId: id, query, userMsgId, assistantMsgId } }
+    )
+  }
+
+  enqueueRequest({ type: 'search', execute: doSend }, { text: query })
 }
 
 function triggerSearchIfNeeded() {
-  const msgs = resumeStore.messages
-  if (msgs.length > 0 && msgs[msgs.length - 1].role === 'user') {
-    const sdkMsgs = chat.messages ?? []
-    const hasAssistantReply = sdkMsgs.some((m: any) => m.role === 'assistant')
-    if (hasAssistantReply) return
-    autoTriggerSearch(msgs[msgs.length - 1].content, conversationId.value)
+  const chat = editorChat.chat.value
+  if (!chat) return
+
+  if (
+    chatStore.messages.length > 0 &&
+    chatStore.messages[chatStore.messages.length - 1].role === 'user'
+  ) {
+    const sdkMessages = chat.messages ?? []
+    const hasAssistantReply = sdkMessages.some((message) => message.role === 'assistant')
+    if (!hasAssistantReply) {
+      autoTriggerSearch(
+        chatStore.messages[chatStore.messages.length - 1].content,
+        conversationId.value
+      )
+    }
   }
 }
 
-function onToggleReasoning(msgId: string) {
-  const current = showReasoningMap.get(msgId) ?? false
-  showReasoningMap.set(msgId, !current)
-  const msg = messages.value.find((m) => m.id === msgId)
-  if (msg) msg.showReasoning = !current
-}
-
-onUnmounted(() => {
-  if (pdfUrl.value && pdfUrl.value !== resumeStore.fileBlobUrl) {
-    URL.revokeObjectURL(pdfUrl.value)
-  }
-  pdfUrl.value = ''
-})
-
-onMounted(async () => {
-  const routeId = route.params.id as string
-  if (!routeId) {
-    router.push('/conversations')
-    return
-  }
+async function setupConversation(
+  id: string,
+  options?: { resetMessages?: boolean; errorMsg?: string }
+) {
+  const { resetMessages = false, errorMsg } = options || {}
+  const minLoad = new Promise((resolve) => setTimeout(resolve, resetMessages ? 200 : 300))
 
   try {
-    const { totalMessages, initialPrompt: loadedInitialPrompt } =
-      await resumeStore.loadConversation(routeId)
-    conversationId.value = routeId
-    loadConversationToState(routeId, totalMessages)
+    const [{ totalMessages, initialPrompt: loadedPrompt }] = await Promise.all([
+      chatStore.loadConversation(id),
+      minLoad
+    ])
+    if (resetMessages && id !== route.params.id) return
 
-    const historyMessages = resumeStore.messages.map((m) => ({
-      id: m.id,
-      role: m.role as 'user' | 'assistant',
-      parts: [{ type: 'text', text: m.content }]
+    loadConversationToState(id, totalMessages)
+
+    const historyMessages = chatStore.messages.map((message) => ({
+      id: message.id,
+      role: message.role as 'user' | 'assistant',
+      parts: [{ type: 'text' as const, text: message.content }]
     }))
     initChat(historyMessages)
-    messages.value = resumeStore.messages
 
-    if (resumeStore.fileBlobUrl) {
-      pdfUrl.value = resumeStore.fileBlobUrl
-    }
-
-    if (resumeStore.messages.length === 0 && loadedInitialPrompt) {
-      autoTriggerSearch(loadedInitialPrompt, routeId)
+    const initialPrompt = loadedPrompt || chatStore.initialPrompt
+    if (chatStore.messages.length === 0 && initialPrompt) {
+      autoTriggerSearch(initialPrompt, id)
     } else {
       triggerSearchIfNeeded()
     }
 
     loading.value = false
-
     await nextTick()
     chatPanelRef.value?.scrollToBottom()
-  } catch (e) {
-    console.error('Failed to load conversation:', e)
-    error.value = '加载会话失败'
+    setTimeout(() => {
+      scrollReady.value = true
+    }, 300)
+  } catch (loadError) {
+    console.error('Failed to load conversation:', loadError)
+    if (errorMsg) error.value = errorMsg
     loading.value = false
   }
+}
+
+onMounted(() => {
+  setupConversation(String(route.params.id || ''), { errorMsg: '加载会话失败' })
 })
 
 watch(
   () => route.params.id,
-  async (newId) => {
-    if (newId && newId !== conversationId.value) {
+  (newId) => {
+    const nextId = String(newId || '')
+    if (nextId && nextId !== conversationId.value) {
       loading.value = true
       messages.value = []
       showReasoningMap.clear()
-      try {
-        const { totalMessages, initialPrompt: newInitialPrompt } =
-          await resumeStore.loadConversation(newId as string)
-        conversationId.value = newId as string
-        loadConversationToState(newId as string, totalMessages, false)
-
-        const historyMessages = resumeStore.messages.map((m) => ({
-          id: m.id,
-          role: m.role as 'user' | 'assistant',
-          parts: [{ type: 'text', text: m.content }]
-        }))
-        initChat(historyMessages)
-        messages.value = resumeStore.messages
-
-        if (resumeStore.fileBlobUrl) {
-          pdfUrl.value = resumeStore.fileBlobUrl
-        }
-
-        if (resumeStore.messages.length === 0 && newInitialPrompt) {
-          autoTriggerSearch(newInitialPrompt, newId as string)
-        } else {
-          triggerSearchIfNeeded()
-        }
-
-        loading.value = false
-
-        await nextTick()
-        chatPanelRef.value?.scrollToBottom()
-      } catch {
-        error.value = '切换会话失败'
-        loading.value = false
-      }
+      setupConversation(nextId, {
+        resetMessages: true,
+        errorMsg: '切换会话失败'
+      })
     }
   }
 )
+
+onUnmounted(() => {
+  chatStore.clearFileBlob()
+})
 </script>
 
 <style scoped>
 .editor-page {
   display: flex;
-  height: calc(100vh - 50px);
+  height: 100vh;
 }
 
 .left-panel {
   flex: 1;
-  padding: 20px;
-  background: #f5f5f5;
+  padding: 8px;
+  background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .right-panel {
   width: 400px;
-  padding: 20px;
-  background: white;
+  background: var(--bg);
 }
 </style>
