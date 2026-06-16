@@ -66,12 +66,6 @@ src/
 | `/app/documents`        | `DocumentLibraryPage`     | 文档库               |
 | `/app/system-knowledge` | `SystemKnowledgePage`     | 系统知识库，仅管理员 |
 
-兼容跳转：
-
-- `/conversations` -> `/app/conversations`
-- `/editor/:id` -> `/app/chat/:id`
-- `/editor` -> `/app/chat`
-
 ## 关键组件
 
 ### `components/chat`

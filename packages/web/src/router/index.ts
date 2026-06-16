@@ -31,9 +31,6 @@ const router = createRouter({
         }
       ]
     },
-    { path: '/conversations', redirect: '/app/conversations' },
-    { path: '/editor/:id', redirect: (to) => `/app/chat/${to.params.id}` },
-    { path: '/editor', redirect: '/app/chat' }
   ]
 })
 
