@@ -61,13 +61,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import { generateId } from 'ai'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { api, deleteReferenceFile } from '@/api'
+import { api } from '@/api/client'
+import { deleteReferenceFile } from '@/api/document'
 import { useChatStore } from '@/stores/chat.store'
 import { useRequestQueue } from '@/composables/chat/useQueue'
 import { useEditorPdf } from '@/composables/editor/usePdf'
@@ -75,14 +76,24 @@ import { useEditorHistory } from '@/composables/editor/useHistory'
 import { useEditorChat } from '@/composables/chat/useChat'
 import { useEditorModifications } from '@/composables/editor/useModifications'
 import { resolveSearchQuery, shouldLoadMoreHistory } from '@/lib/chat-page-helpers'
-import PdfViewer from '@/components/editor/PdfViewer.vue'
-import ChatPanel from '@/components/chat/ChatPanel.vue'
 import EditorSkeleton from '@/components/editor/EditorSkeleton.vue'
 import type { Message, MessageAttachment, ModificationItem, OptimizationItem } from '@/types/chat'
+
+const PdfViewer = defineAsyncComponent(() => import('@/components/editor/PdfViewer.vue'))
+const ChatPanel = defineAsyncComponent(() => import('@/components/chat/ChatPanel.vue'))
+
+interface ChatPanelHandle {
+  scrollToBottom: () => void
+  getScrollHeight?: () => number
+  restoreScrollPosition?: (pos: number) => void
+  setInput?: (text: string) => void
+  openSupplementDialog?: () => void
+}
+
 const route = useRoute()
 const chatStore = useChatStore()
 const { messages } = storeToRefs(chatStore)
-const chatPanelRef = ref<InstanceType<typeof ChatPanel>>()
+const chatPanelRef = ref<ChatPanelHandle>()
 const loading = ref(true)
 const error = ref('')
 const conversationId = ref('')
@@ -288,6 +299,7 @@ function onChatSend(
   enqueueRequest(
     {
       type: 'search',
+      refreshReferencesOnComplete: files.length > 0 || docIds.length > 0,
       execute: () => {
         isLoading.value = true
         supplementCount.value = 0

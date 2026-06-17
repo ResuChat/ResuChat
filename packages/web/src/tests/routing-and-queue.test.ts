@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearAuth, getAccessToken, saveAuth } from '../lib/auth'
+import { useRequestQueue } from '../composables/chat/useQueue'
 
 interface QueueItem {
   id?: string
@@ -119,20 +120,43 @@ describe('routing and queue', () => {
       expect(executed).toBe(2)
     })
 
-    it('dequeue should invoke loadReferenceFiles callback', () => {
-      let called = 0
-      const queue: QueueItem[] = []
-      const loadReferenceFiles = () => {
-        called++
-      }
-      const dequeue = () => {
-        if (queue.length > 0) queue.shift()
-        loadReferenceFiles()
-      }
+    it('dequeue should not invoke loadReferenceFiles without refresh marker', () => {
+      const loadReferenceFiles = vi.fn()
+      const queue = useRequestQueue({ loadReferenceFiles })
 
-      queue.push({ id: '1', status: 'pending' })
-      dequeue()
-      expect(called).toBe(1)
+      queue.requestQueue.value.push({
+        id: '1',
+        type: 'search',
+        label: 'search',
+        execute: vi.fn(),
+        canceled: false,
+        timestamp: 1,
+        status: 'processing'
+      })
+
+      queue.dequeue()
+
+      expect(loadReferenceFiles).not.toHaveBeenCalled()
+    })
+
+    it('dequeue should invoke loadReferenceFiles when refresh marker is set', () => {
+      const loadReferenceFiles = vi.fn()
+      const queue = useRequestQueue({ loadReferenceFiles })
+
+      queue.requestQueue.value.push({
+        id: '1',
+        type: 'search',
+        label: 'search',
+        execute: vi.fn(),
+        canceled: false,
+        timestamp: 1,
+        status: 'processing',
+        refreshReferencesOnComplete: true
+      })
+
+      queue.dequeue()
+
+      expect(loadReferenceFiles).toHaveBeenCalledTimes(1)
     })
 
     it('enqueueRequest should dedup pending request for same field', () => {

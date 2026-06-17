@@ -28,6 +28,7 @@ export function useRequestQueue({ loadReferenceFiles }: UseRequestQueueDeps) {
       execute: () => void
       disabledKey?: string
       wasSupplement?: boolean
+      refreshReferencesOnComplete?: boolean
     },
     payload?: QueuePayload
   ) {
@@ -75,11 +76,14 @@ export function useRequestQueue({ loadReferenceFiles }: UseRequestQueueDeps) {
   }
 
   function dequeue() {
+    let completedRequest: QueuedRequest | undefined
     if (requestQueue.value.length > 0) {
       requestQueue.value[0].status = 'completed'
-      requestQueue.value.shift()
+      completedRequest = requestQueue.value.shift()
     }
-    loadReferenceFiles()
+    if (completedRequest?.refreshReferencesOnComplete) {
+      loadReferenceFiles()
+    }
     processQueue()
   }
 
