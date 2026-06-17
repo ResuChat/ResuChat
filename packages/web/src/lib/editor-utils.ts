@@ -1,4 +1,5 @@
-import type { OptimizationItem, ModificationItem, Message, MessageAttachment } from '@/types/chat'
+import { normalizeMessageAttachments } from '@resuchat/shared'
+import type { OptimizationItem, ModificationItem, Message } from '@/types/chat'
 
 interface MessagePart {
   type?: string
@@ -50,8 +51,16 @@ export function extractPartsOptimizations(
   const list: OptimizationItem[] = []
   for (const part of parts?.filter(isToolPart) ?? []) {
     const output = resolveToolOutput(part)
-    if (output?.optimization) list.push(output.optimization as OptimizationItem)
-    if (output?.optimizations) list.push(...(output.optimizations as OptimizationItem[]))
+    if (output?.optimization) {
+      const item = normalizeOptimizationItem(output.optimization)
+      if (item) list.push(item)
+    }
+    if (Array.isArray(output?.optimizations)) {
+      for (const value of output.optimizations) {
+        const item = normalizeOptimizationItem(value)
+        if (item) list.push(item)
+      }
+    }
   }
   return list
 }
@@ -63,9 +72,60 @@ export function extractPartsModifications(
   const list: ModificationItem[] = []
   for (const part of parts?.filter(isToolPart) ?? []) {
     const output = resolveToolOutput(part)
-    if (output?.modification) list.push(output.modification as ModificationItem)
+    const item = normalizeModificationItem(output?.modification)
+    if (item) list.push(item)
   }
   return list
+}
+
+export function normalizeOptimizationItem(value: unknown): OptimizationItem | null {
+  if (!isRecord(value)) {
+    console.warn('Ignored invalid optimization item', { reason: 'not_object' })
+    return null
+  }
+  const base = normalizeModificationLike(value, 'optimization')
+  if (!base) return null
+  if (value.priority !== '高' && value.priority !== '中' && value.priority !== '低') {
+    console.warn('Ignored invalid optimization item', { reason: 'invalid_priority' })
+    return null
+  }
+  return { ...base, priority: value.priority }
+}
+
+export function normalizeModificationItem(value: unknown): ModificationItem | null {
+  if (!isRecord(value)) {
+    console.warn('Ignored invalid modification item', { reason: 'not_object' })
+    return null
+  }
+  return normalizeModificationLike(value, 'modification')
+}
+
+function normalizeModificationLike(
+  value: Record<string, unknown>,
+  label: 'optimization' | 'modification'
+): ModificationItem | null {
+  if (
+    !isNonEmptyString(value.field) ||
+    !isNonEmptyString(value.current) ||
+    !isNonEmptyString(value.suggestion)
+  ) {
+    console.warn(`Ignored invalid ${label} item`, { reason: 'missing_required_fields' })
+    return null
+  }
+  if (value.reason !== undefined && typeof value.reason !== 'string') {
+    console.warn(`Ignored invalid ${label} item`, { reason: 'invalid_reason' })
+    return null
+  }
+  return {
+    field: value.field,
+    current: value.current,
+    suggestion: value.suggestion,
+    reason: value.reason
+  }
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 /** 判断是否为工具调用部件 */
@@ -110,44 +170,6 @@ export function mapApiMessage(m: {
       ? { status: m.status as 'streaming' | 'interrupted' }
       : {})
   }
-}
-
-function normalizeMessageAttachments(value: unknown): MessageAttachment[] | undefined {
-  if (!Array.isArray(value)) return undefined
-
-  const attachments = value.flatMap((item): MessageAttachment[] => {
-    if (!item || typeof item !== 'object') return []
-    const raw = item as Record<string, unknown>
-    if (raw.type !== 'reference') return []
-    if (raw.source !== 'upload' && raw.source !== 'library') return []
-    if (typeof raw.name !== 'string' || raw.name.trim().length === 0) return []
-
-    return [
-      {
-        type: 'reference',
-        source: raw.source,
-        name: raw.name,
-        refId: optionalPositiveInteger(raw.refId),
-        globalDocId: optionalPositiveInteger(raw.globalDocId),
-        docId: optionalPositiveInteger(raw.docId),
-        fileType: typeof raw.fileType === 'string' ? raw.fileType : undefined,
-        fileSize: optionalNonNegativeInteger(raw.fileSize),
-        category: typeof raw.category === 'string' ? raw.category : undefined
-      }
-    ]
-  })
-
-  return attachments.length ? attachments : undefined
-}
-
-function optionalPositiveInteger(value: unknown): number | undefined {
-  const numberValue = Number(value)
-  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : undefined
-}
-
-function optionalNonNegativeInteger(value: unknown): number | undefined {
-  const numberValue = Number(value)
-  return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : undefined
 }
 
 // ── UIMessage 便捷包装（从 ai-sdk 的 UIMessage 提取内容） ──

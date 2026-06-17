@@ -27,12 +27,12 @@ export class MultipartChatTransport<
     abortSignal: AbortSignal | undefined
     body?: object
   }): Promise<ReadableStream<UIMessageChunk>> {
-    const body = options.body as Record<string, unknown> | undefined
+    const body = getBodyRecord(options.body)
     const api =
       body?.type === 'apply' || body?.type === 'accept' ? '/api/modify/apply' : '/api/chat/search'
 
-    const files = (options.body as unknown as { files: unknown[] })?.files
-    const hasFiles = files?.length > 0
+    const files = getBodyFiles(body)
+    const hasFiles = files.length > 0
     const token = getAccessToken()
     const headers: Record<string, string> = {
       ...(token ? { token } : {})
@@ -49,14 +49,12 @@ export class MultipartChatTransport<
       if (options.messageId) {
         formData.append('messageId', options.messageId)
       }
-      if (options.body) {
-        for (const [key, value] of Object.entries(options.body)) {
-          if (value !== undefined && key !== 'files') {
-            formData.append(key, typeof value === 'string' ? value : JSON.stringify(value))
-          }
+      for (const [key, value] of Object.entries(body)) {
+        if (value !== undefined && key !== 'files') {
+          formData.append(key, typeof value === 'string' ? value : JSON.stringify(value))
         }
       }
-      for (const file of files as File[]) {
+      for (const file of files) {
         formData.append('files', file, file.name)
       }
 
@@ -74,11 +72,9 @@ export class MultipartChatTransport<
       if (options.messageId) {
         jsonBody.messageId = options.messageId
       }
-      if (options.body) {
-        for (const [key, value] of Object.entries(options.body)) {
-          if (value !== undefined && key !== 'files') {
-            jsonBody[key] = value
-          }
+      for (const [key, value] of Object.entries(body)) {
+        if (value !== undefined && key !== 'files') {
+          jsonBody[key] = value
         }
       }
       headers['Content-Type'] = 'application/json'
@@ -116,4 +112,21 @@ export class MultipartChatTransport<
       })
     )
   }
+}
+
+function getBodyRecord(body: unknown): Record<string, unknown> {
+  return isPlainObject(body) ? body : {}
+}
+
+function getBodyFiles(body: Record<string, unknown>): File[] {
+  const files = body.files
+  if (files === undefined) return []
+  if (Array.isArray(files) && files.every((file) => file instanceof File)) return files
+  throw new Error('Multipart files must be an array of File objects')
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }
