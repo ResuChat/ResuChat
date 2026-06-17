@@ -1,10 +1,11 @@
 import { shallowRef, watch, type Ref } from 'vue'
 import { Chat } from '@ai-sdk/vue'
 import type { UIMessage } from 'ai'
-import { getConversationMessages } from '@/api'
+import { getConversationMessages } from '@/api/conversation'
 import { MultipartChatTransport } from '@/lib/multipart-chat-transport'
 import { useChatStore } from '@/stores/chat.store'
 import { attachAuthHeaders } from '@/lib/auth'
+import { getSdkMessageSignature, syncSdkMessageToStore } from '@/lib/chat-message-sync'
 import {
   extractMessageContent,
   extractReasoning,
@@ -153,8 +154,16 @@ export function useEditorChat(options: UseEditorChatOptions) {
     )
 
     chatWatchHandle = watch(
-      () => chat.value?.messages,
-      (sdkMessages) => {
+      () => {
+        const sdkMessages = chat.value?.messages ?? []
+        const lastMessage = sdkMessages.at(-1)
+        return {
+          length: sdkMessages.length,
+          lastSignature: lastMessage ? getSdkMessageSignature(lastMessage) : ''
+        }
+      },
+      (signature, previousSignature) => {
+        const sdkMessages = chat.value?.messages
         console.log(
           '[chat watch] messages changed, length:',
           sdkMessages?.length,
@@ -163,44 +172,23 @@ export function useEditorChat(options: UseEditorChatOptions) {
         )
         if (!sdkMessages || sdkMessages.length === 0) return
 
-        for (const sdkMsg of sdkMessages) {
-          const content = extractMessageContent(sdkMsg)
-
-          if (!content && sdkMsg.role === 'assistant') {
-            const allTool = (sdkMsg.parts ?? []).every(
-              (p: object & { type: string }) =>
-                p.type.startsWith('tool-') || p.type === 'dynamic-tool'
-            )
-            if (allTool) continue
+        let changed = false
+        if (!previousSignature || signature.length !== previousSignature.length) {
+          for (const sdkMsg of sdkMessages) {
+            changed =
+              syncSdkMessageToStore(options.messages.value, sdkMsg, showReasoningMap) || changed
           }
-
-          const idx = options.messages.value.findIndex((m) => m.id === sdkMsg.id)
-          const reasoning = extractReasoning(sdkMsg)
-          const optimizations = extractOptimizations(sdkMsg)
-          const modifications = extractModifications(sdkMsg)
-          if (idx >= 0) {
-            if (content) options.messages.value[idx].content = content
-            if (reasoning) options.messages.value[idx].reasoning = reasoning
-            if (optimizations.length) options.messages.value[idx].optimizations = optimizations
-            if (modifications.length) options.messages.value[idx].modifications = modifications
-          } else {
-            options.messages.value.push({
-              id: sdkMsg.id ?? '',
-              role: sdkMsg.role as 'user' | 'assistant',
-              content,
-              reasoning,
-              showReasoning: showReasoningMap.get(sdkMsg.id ?? '') ?? false,
-              optimizations,
-              modifications
-            })
+        } else {
+          const lastMessage = sdkMessages.at(-1)
+          if (lastMessage) {
+            changed = syncSdkMessageToStore(options.messages.value, lastMessage, showReasoningMap)
           }
         }
 
-        if (options.autoScroll.value) {
+        if (changed && options.autoScroll.value) {
           options.chatPanelRef.value?.scrollToBottom?.()
         }
-      },
-      { deep: true }
+      }
     )
 
     if (options.messages.value.length > 0) {
