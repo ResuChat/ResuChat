@@ -1,11 +1,7 @@
-import {
-  api,
-  getConversationMessages,
-  renderResumePdf,
-  type Conversation,
-  type ConversationMessagesResponse,
-  type DocumentRecord
-} from '@/api'
+import { api } from '@/api/client'
+import { getConversationMessages } from '@/api/conversation'
+import { renderResumePdf } from '@/api/document'
+import type { Conversation, ConversationMessagesResponse, DocumentRecord } from '@/types/api'
 import type { Message } from '@/types/chat'
 import { mapApiMessage } from '@/lib/editor-utils'
 
