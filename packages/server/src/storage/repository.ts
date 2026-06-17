@@ -26,6 +26,7 @@ export {
   buildHistoryPrompt,
   getRecentConversationContextMessages,
   storeMessage,
+  storeMessageInTransaction,
   getConversationMessages,
   getMessagesBefore
 } from './document/messages'
@@ -37,7 +38,9 @@ export {
   getConversationDocs,
   setConversationChunks,
   setConversationChunksWithTypes,
+  setConversationChunksWithTypesInTransaction,
   appendConversationChunks,
+  appendConversationChunksInTransaction,
   deleteChunksByRefId,
   getConversationChunksWithTypes
 } from './document/chunks'
