@@ -18,6 +18,7 @@ import {
 import { logger } from '../lib/logger'
 import { closeDb } from '../lib/db'
 import { purgeExpiredDeletedConversations } from '../services/document/conversation.service'
+import { resetStuckStreamingMessages } from '../services/chat/stream-persistence.service'
 import { deleteLoginHistoryBefore } from '../storage/user/users'
 
 const connection = { url: REDIS_URL }
@@ -143,6 +144,10 @@ async function runWorkerStartupTasks(): Promise<void> {
   const requeuedSystemDocs = await requeuePendingSystemDocumentIndexing()
   if (requeuedSystemDocs > 0) {
     logger.warn('Queue requeued pending system documents', { count: requeuedSystemDocs })
+  }
+  const stuckStreaming = await resetStuckStreamingMessages()
+  if (stuckStreaming > 0) {
+    logger.warn('Queue reset stuck streaming messages', { count: stuckStreaming })
   }
   await runConversationTrashPurge()
   await runLoginHistoryPurge()

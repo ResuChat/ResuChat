@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { eq } from 'drizzle-orm'
 import {
   getMessageStatusByClientId,
   insertMessageWithClientId,
@@ -6,6 +7,7 @@ import {
   touchConversation,
   updateMessageByClientId
 } from '../../storage/document/messages'
+import { db, schema } from '../../lib/db'
 import { logger } from '../../lib/logger'
 import { triggerAutoSummary } from './summary.service'
 import type { MessageAttachment } from '../../types/domain'
@@ -204,4 +206,13 @@ export async function persistSearchMessages(params: {
 
   await touchConversation(conversationId)
   return assistantMsgId ?? null
+}
+
+export async function resetStuckStreamingMessages(): Promise<number> {
+  const result = await db
+    .update(schema.messages)
+    .set({ status: 'interrupted' })
+    .where(eq(schema.messages.status, 'streaming'))
+    .returning({ id: schema.messages.id })
+  return result.length
 }
