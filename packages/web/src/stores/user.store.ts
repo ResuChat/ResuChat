@@ -1,12 +1,22 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getUserProfile, api, bindPhone as bindPhoneApi, type UserProfile } from '@/api'
+import {
+  getUserProfile,
+  bindPhone as bindPhoneApi,
+  getUserNotifications,
+  markAllUserNotificationsRead,
+  markUserNotificationRead
+} from '@/api/user'
+import { api } from '@/api/client'
+import type { UserNotificationRecord, UserProfile, UserRole } from '@/types/api'
 
 export const useUserStore = defineStore(
   'user',
   () => {
     const userInfo = ref<UserProfile | null>(null)
     const userLoading = ref(false)
+    const notifications = ref<UserNotificationRecord[]>([])
+    const unreadNotificationCount = ref(0)
 
     async function fetchUserProfile(force = false) {
       if (userInfo.value?.role && !force) return userInfo.value
@@ -33,7 +43,57 @@ export const useUserStore = defineStore(
       if (userInfo.value) userInfo.value.phone = phone
     }
 
-    return { userInfo, userLoading, fetchUserProfile, updateProfile, bindPhone }
+    function updateRole(role: UserRole) {
+      if (userInfo.value) userInfo.value.role = role
+    }
+
+    async function fetchNotifications() {
+      const result = await getUserNotifications()
+      notifications.value = result.data
+      unreadNotificationCount.value = result.unreadCount
+      return result
+    }
+
+    function prependNotification(notification: UserNotificationRecord) {
+      notifications.value = [
+        notification,
+        ...notifications.value.filter((item) => item.id !== notification.id)
+      ].slice(0, 20)
+      if (notification.readAt === null) unreadNotificationCount.value += 1
+    }
+
+    async function markNotificationRead(id: number) {
+      await markUserNotificationRead(id)
+      const item = notifications.value.find((notification) => notification.id === id)
+      if (item && item.readAt === null) {
+        item.readAt = Date.now()
+        unreadNotificationCount.value = Math.max(0, unreadNotificationCount.value - 1)
+      }
+    }
+
+    async function markNotificationsReadAll() {
+      await markAllUserNotificationsRead()
+      const now = Date.now()
+      notifications.value.forEach((notification) => {
+        if (notification.readAt === null) notification.readAt = now
+      })
+      unreadNotificationCount.value = 0
+    }
+
+    return {
+      userInfo,
+      userLoading,
+      notifications,
+      unreadNotificationCount,
+      fetchUserProfile,
+      updateProfile,
+      bindPhone,
+      updateRole,
+      fetchNotifications,
+      prependNotification,
+      markNotificationRead,
+      markNotificationsReadAll
+    }
   },
-  { persist: { pick: ['userInfo'] } }
+  { persist: { pick: ['userInfo', 'notifications', 'unreadNotificationCount'] } }
 )

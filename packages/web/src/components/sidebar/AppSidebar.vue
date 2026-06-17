@@ -139,43 +139,88 @@
       >
         <el-icon :size="18"> <Sunny v-if="theme.isDark.value" /><Moon v-else /> </el-icon>
       </div>
-      <el-dropdown trigger="click" placement="right-end">
-        <div
-          class="sidebar-user flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer transition-colors"
-        >
-          <img
-            v-if="userStore.userInfo?.avatar"
-            :src="userStore.userInfo.avatar"
-            class="rounded-full object-cover"
-            :class="collapsed ? 'w-6 h-6' : 'w-5 h-5'"
-          />
-          <div
-            v-else
-            class="flex items-center justify-center rounded-full bg-(--primary) text-[11px] text-white"
-            :class="collapsed ? 'w-6 h-6' : 'w-5 h-5'"
-          >
-            {{ displayName.charAt(0).toUpperCase() }}
+      <div class="flex items-center gap-1" :class="collapsed ? 'flex-col' : ''">
+        <el-popover trigger="click" placement="right-end" width="320" @show="loadNotifications">
+          <template #reference>
+            <div
+              class="sidebar-action relative w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+              title="站内信"
+            >
+              <el-icon :size="18"><Bell /></el-icon>
+              <span
+                v-if="userStore.unreadNotificationCount > 0"
+                class="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-red-500 px-1 text-center text-[10px] leading-4 text-white"
+              >
+                {{ unreadBadge }}
+              </span>
+            </div>
+          </template>
+          <div class="notification-panel">
+            <div class="notification-panel__header">
+              <span>站内信</span>
+              <button
+                class="notification-panel__action"
+                :disabled="userStore.unreadNotificationCount === 0"
+                @click="markAllNotificationsRead"
+              >
+                全部已读
+              </button>
+            </div>
+            <div v-if="userStore.notifications.length === 0" class="notification-panel__empty">
+              暂无消息
+            </div>
+            <div v-else class="notification-panel__list">
+              <button
+                v-for="item in userStore.notifications"
+                :key="item.id"
+                class="notification-panel__item"
+                :class="{ 'notification-panel__item--unread': item.readAt === null }"
+                @click="markNotificationRead(item.id)"
+              >
+                <span class="notification-panel__title">{{ item.title }}</span>
+                <span class="notification-panel__content">{{ item.content }}</span>
+                <span class="notification-panel__time">{{ formatTime(item.createdAt) }}</span>
+              </button>
+            </div>
           </div>
-          <span
-            v-show="!collapsed"
-            class="text-[13px] overflow-hidden text-ellipsis whitespace-nowrap"
-            >{{ displayName }}</span
+        </el-popover>
+        <el-dropdown trigger="click" placement="right-end">
+          <div
+            class="sidebar-user w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+            :title="displayName"
           >
-        </div>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item disabled>
-              {{ userStore.userInfo?.phone || '未登录' }}
-            </el-dropdown-item>
-            <el-dropdown-item @click="showProfileDialog = true">
-              <el-icon><Edit /></el-icon> 编辑资料
-            </el-dropdown-item>
-            <el-dropdown-item divided @click="handleLogout">
-              <el-icon><SwitchButton /></el-icon> 退出登录
-            </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+            <img
+              v-if="userStore.userInfo?.avatar"
+              :src="userStore.userInfo.avatar"
+              class="h-6 w-6 rounded-full object-cover"
+            />
+            <div
+              v-else
+              class="flex h-6 w-6 items-center justify-center rounded-full bg-(--primary) text-[11px] text-white"
+            >
+              {{ displayName.charAt(0).toUpperCase() }}
+            </div>
+          </div>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item disabled>
+                <div class="user-menu-header">
+                  <span class="user-menu-header__name">{{ displayName }}</span>
+                  <span class="user-menu-header__meta">
+                    {{ userStore.userInfo?.phone || '未登录' }}
+                  </span>
+                </div>
+              </el-dropdown-item>
+              <el-dropdown-item @click="showProfileDialog = true">
+                <el-icon><Edit /></el-icon> 编辑资料
+              </el-dropdown-item>
+              <el-dropdown-item divided @click="handleLogout">
+                <el-icon><SwitchButton /></el-icon> 退出登录
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
     </div>
     <ProfileDialog v-model:visible="showProfileDialog" />
   </aside>
@@ -196,12 +241,14 @@ import {
   Edit,
   SwitchButton,
   Sunny,
-  Moon
+  Moon,
+  Bell
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useChatStore } from '@/stores/chat.store'
 import { useUserStore } from '@/stores/user.store'
-import { deleteConversation, logout } from '@/api'
+import { deleteConversation } from '@/api/conversation'
+import { logout } from '@/api/user'
 import ProfileDialog from '@/components/profile/ProfileDialog.vue'
 import { formatTime } from '@/lib/format'
 import { useTheme } from '@/composables/app/useTheme'
@@ -221,6 +268,9 @@ const displayName = computed(
 )
 const isAdmin = computed(() => userStore.userInfo?.role === 'admin')
 const showProfileDialog = ref(false)
+const unreadBadge = computed(() =>
+  userStore.unreadNotificationCount > 99 ? '99+' : String(userStore.unreadNotificationCount)
+)
 
 async function refreshList() {
   loading.value = true
@@ -238,9 +288,19 @@ async function handleLogout() {
   clearAuth()
   router.push('/')
 }
+async function loadNotifications() {
+  await userStore.fetchNotifications().catch(() => undefined)
+}
+async function markNotificationRead(id: number) {
+  await userStore.markNotificationRead(id).catch(() => undefined)
+}
+async function markAllNotificationsRead() {
+  await userStore.markNotificationsReadAll().catch(() => undefined)
+}
 onMounted(() => {
   chatStore.fetchConversations(1, 50)
   userStore.fetchUserProfile(true).catch(() => undefined)
+  userStore.fetchNotifications().catch(() => undefined)
 })
 </script>
 
@@ -257,5 +317,113 @@ onMounted(() => {
 .sidebar-user:hover {
   background: var(--sidebar-hover);
   color: var(--sidebar-text);
+}
+
+.notification-panel {
+  display: flex;
+  max-height: 360px;
+  flex-direction: column;
+}
+
+.notification-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.notification-panel__action {
+  border: 0;
+  background: transparent;
+  color: var(--el-color-primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.notification-panel__action:disabled {
+  color: var(--el-text-color-disabled);
+  cursor: default;
+}
+
+.notification-panel__empty {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.notification-panel__list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding-top: 6px;
+}
+
+.notification-panel__item {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notification-panel__item:hover {
+  background: var(--el-fill-color-light);
+}
+
+.notification-panel__item--unread {
+  background: var(--el-color-primary-light-9);
+}
+
+.notification-panel__title {
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.notification-panel__content {
+  color: var(--el-text-color-regular);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.notification-panel__time {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+}
+
+.user-menu-header {
+  display: flex;
+  min-width: 150px;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.user-menu-header__name {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu-header__meta {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

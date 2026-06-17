@@ -6,6 +6,8 @@ export type {
   DocumentRecord,
   UserRole,
   UserProfile,
+  UserNotificationRecord,
+  UserNotificationsResponse,
   ConversationsResponse,
   ConversationMessagesResponse,
   ReferenceDoc,
