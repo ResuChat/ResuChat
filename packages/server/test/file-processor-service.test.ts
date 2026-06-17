@@ -191,12 +191,7 @@ describe('processFileAsReference', () => {
     )
 
     const { processDocIdsAsReference } = await import('../src/services/chat/file-processor.service')
-    const results = await processDocIdsAsReference(
-      [2, 99, 1],
-      'user-1',
-      'conv-1',
-      new Set()
-    )
+    const results = await processDocIdsAsReference([2, 99, 1], 'user-1', 'conv-1', new Set())
 
     expect(getUserDocsWithFiles).toHaveBeenCalledTimes(1)
     expect(getUserDocsWithFiles).toHaveBeenCalledWith('user-1', [2, 99, 1])
