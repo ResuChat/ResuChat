@@ -8,9 +8,9 @@ import {
   addFileToConversation,
   cleanupOldVersions,
   updateDocumentRefSnapshot,
-  addToUserLibrary,
-  getUserDocWithFile
+  addToUserLibrary
 } from '../../storage/document/file-manager'
+import { getUserDocsWithFiles } from '../../storage/user/user-documents'
 import {
   createConversation,
   deleteConversation,
@@ -30,7 +30,12 @@ import {
 } from '../../storage/repository'
 import { decodeFilename } from '../../lib/text'
 import { classifyReferenceFile } from '../chat/classifier.service'
-import { inferStoredFileType, parseFileContent, type MulterFile } from '../../lib/file-content'
+import {
+  assertSupportedUploadFile,
+  inferStoredFileType,
+  parseFileContent,
+  type MulterFile
+} from '../../lib/file-content'
 import { logger } from '../../lib/logger'
 import { createOwnerGuard, type AuthGuard, type OwnerIdGetter } from '../../middleware/authGuard'
 
@@ -156,7 +161,8 @@ export async function startConversation(
   let preParsedMarkdown: string | undefined
   let preParsedLocalName: string | undefined
   if (docId && userId) {
-    const fileData = await getUserDocWithFile(userId, docId)
+    const docsById = await getUserDocsWithFiles(userId, [docId])
+    const fileData = docsById.get(docId)
     if (!fileData) throw new ValidationError('文档不存在或无权访问')
     preParsedMarkdown = fileData.markdown ?? undefined
     preParsedLocalName = fileData.localName
@@ -199,6 +205,7 @@ export async function startConversation(
 
     let firstFile = true
     for (const file of decodedFiles) {
+      assertSupportedUploadFile(file.originalname, preParsedMarkdown ? undefined : file.mimetype)
       const fileType = inferStoredFileType(file.originalname)
       if (fileType === 'doc' && !preParsedMarkdown) {
         throw new ValidationError(

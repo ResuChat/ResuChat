@@ -38,6 +38,15 @@ export interface UserDocFileInfo {
   markdownContent: string | null
 }
 
+export interface UserDocWithFile {
+  buffer: Buffer
+  originalName: string
+  localName: string
+  fileType: string
+  markdown: string | null
+  contentCategory: string | null
+}
+
 // ── UserDocument 用户文档库 ──
 
 export async function addToUserLibrary(
@@ -79,14 +88,7 @@ export async function addToUserLibrary(
 export async function getUserDocWithFile(
   userId: string,
   docId: number
-): Promise<{
-  buffer: Buffer
-  originalName: string
-  localName: string
-  fileType: string
-  markdown: string | null
-  contentCategory: string | null
-} | null> {
+): Promise<UserDocWithFile | null> {
   const [doc] = await db
     .select({ userDoc: schema.userDocuments, globalDoc: schema.globalDocuments })
     .from(schema.userDocuments)
@@ -106,6 +108,39 @@ export async function getUserDocWithFile(
     markdown: doc.userDoc.markdownContent,
     contentCategory: doc.userDoc.category
   }
+}
+
+export async function getUserDocsWithFiles(
+  userId: string,
+  docIds: number[]
+): Promise<Map<number, UserDocWithFile>> {
+  const uniqueDocIds = Array.from(new Set(docIds)).filter((id) => Number.isInteger(id) && id > 0)
+  if (uniqueDocIds.length === 0) return new Map()
+
+  const rows = await db
+    .select({ userDoc: schema.userDocuments, globalDoc: schema.globalDocuments })
+    .from(schema.userDocuments)
+    .innerJoin(
+      schema.globalDocuments,
+      eq(schema.userDocuments.globalDocId, schema.globalDocuments.id)
+    )
+    .where(
+      and(eq(schema.userDocuments.userId, userId), inArray(schema.userDocuments.id, uniqueDocIds))
+    )
+
+  const result = new Map<number, UserDocWithFile>()
+  for (const row of rows) {
+    if (!fs.existsSync(row.globalDoc.filePath)) continue
+    result.set(row.userDoc.id, {
+      buffer: fs.readFileSync(row.globalDoc.filePath),
+      originalName: row.globalDoc.originalName,
+      localName: row.userDoc.localName,
+      fileType: row.globalDoc.fileType,
+      markdown: row.userDoc.markdownContent,
+      contentCategory: row.userDoc.category
+    })
+  }
+  return result
 }
 
 export async function getUserDocFileInfo(id: number): Promise<UserDocFileInfo | null> {

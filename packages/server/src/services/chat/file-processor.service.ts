@@ -3,12 +3,23 @@ import path from 'path'
 import { DocumentLoader } from '../../lib/document/loader'
 import { contentCategoryLabel, decodeFilename } from '../../lib/text'
 import { classifyReferenceFile } from './classifier.service'
-import { inferStoredFileType, parseFileContent, MulterFile } from '../../lib/file-content'
-import { addFileToConversation } from '../../storage/document/file-manager'
-import { getUserDocWithFile } from '../../storage/user/user-documents'
+import {
+  assertSupportedUploadFile,
+  inferStoredFileType,
+  parseFileContent,
+  MulterFile
+} from '../../lib/file-content'
+import {
+  insertConversationFileRef,
+  prepareConversationFile
+} from '../../storage/document/file-manager'
+import { getUserDocsWithFiles } from '../../storage/user/user-documents'
 import { syncChatReferenceToUserLibrary } from '../document/user-documents.service'
-import { appendConversationChunks } from '../../storage/repository'
+import { appendConversationChunksInTransaction } from '../../storage/repository'
 import type { MessageAttachment } from '../../types/domain'
+import { db } from '../../lib/db'
+import { logger } from '../../lib/logger'
+import fs from 'fs'
 
 export interface FileProcessResult {
   refId: number
@@ -57,6 +68,7 @@ export async function processFileAsReference(opts: {
   processedHashes.add(hash)
 
   const decodedName = path.basename(decodeFilename(file.originalname))
+  assertSupportedUploadFile(decodedName, source === 'upload' ? file.mimetype : undefined)
   const referenceName = path.basename(displayName || decodedName)
   const fileContent = contentSnapshot?.trim() ? contentSnapshot : await parseFileContent(file)
 
@@ -66,30 +78,7 @@ export async function processFileAsReference(opts: {
 
   // 持久化到对话
   const fileType = inferStoredFileType(decodedName)
-  const result = await addFileToConversation(
-    conversationId,
-    file.buffer,
-    decodedName,
-    fileType,
-    'reference',
-    category,
-    contentSnapshot,
-    {
-      localName: referenceName,
-      sourceUserDocumentId: source === 'library' ? sourceDocId : undefined
-    }
-  )
-
-  // 同步到用户文档库（仅上传路径需要）
-  if (syncToUserLibrary && uid) {
-    syncChatReferenceToUserLibrary(
-      uid,
-      conversationId,
-      result.globalDocId,
-      referenceName,
-      file.buffer
-    )
-  }
+  const preparedFile = prepareConversationFile(file.buffer, fileType)
 
   // 分块
   const fileRAG = new DocumentLoader()
@@ -104,7 +93,51 @@ export async function processFileAsReference(opts: {
     scope: 'conversation'
   }))
 
-  await appendConversationChunks(conversationId, chunks, result.refId)
+  let result: { refId: number; globalDocId: number }
+  try {
+    result = await db.transaction(async (tx) => {
+      const insertedFile = await insertConversationFileRef(tx, {
+        conversationId,
+        preparedFile,
+        originalName: decodedName,
+        fileType,
+        role: 'reference',
+        category,
+        contentSnapshot,
+        options: {
+          localName: referenceName,
+          sourceUserDocumentId: source === 'library' ? sourceDocId : undefined
+        }
+      })
+      await appendConversationChunksInTransaction(tx, conversationId, chunks, insertedFile.refId)
+      return { refId: insertedFile.refId, globalDocId: insertedFile.globalDocId }
+    })
+  } catch (error) {
+    if (preparedFile.isNewPhysicalFile) {
+      try {
+        if (fs.existsSync(preparedFile.filePath)) fs.unlinkSync(preparedFile.filePath)
+      } catch (cleanupError) {
+        logger.error('Failed to delete orphan reference file after transaction failure', {
+          conversationId,
+          fileName: decodedName,
+          filePath: preparedFile.filePath,
+          error: cleanupError
+        })
+      }
+    }
+    throw error
+  }
+
+  // 同步到用户文档库（仅上传路径需要）
+  if (syncToUserLibrary && uid) {
+    syncChatReferenceToUserLibrary(
+      uid,
+      conversationId,
+      result.globalDocId,
+      referenceName,
+      file.buffer
+    )
+  }
 
   return {
     refId: result.refId,
@@ -135,8 +168,9 @@ export async function processDocIdsAsReference(
   processedHashes: Set<string>
 ): Promise<FileProcessResult[]> {
   const results: FileProcessResult[] = []
+  const docsById = await getUserDocsWithFiles(userId, docIds)
   for (const docId of docIds) {
-    const fileData = await getUserDocWithFile(userId, docId)
+    const fileData = docsById.get(docId)
     if (!fileData) continue
     const file: MulterFile = {
       buffer: fileData.buffer,
