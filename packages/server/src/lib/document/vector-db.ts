@@ -1,9 +1,12 @@
 import * as lancedb from '@lancedb/lancedb'
+import pLimit from 'p-limit'
 import { getEmbedding } from '../ai/providers'
 import { VECTOR_DB_PATH, VECTOR_DB_TABLE, VECTOR_SEARCH_K } from '../config'
 import { logger } from '../logger'
 
 let db: lancedb.Connection | null = null
+const DEFAULT_EMBED_BATCH_CONCURRENCY = 4
+const MAX_EMBED_BATCH_CONCURRENCY = 16
 const MIN_ROWS_FOR_PQ_INDEX = 256
 const SYSTEM_CHUNK_CONTENT_FORMAT = 'markdown'
 const REQUIRED_SYSTEM_CHUNK_FIELDS = [
@@ -34,15 +37,15 @@ type SearchSystemChunksOptions = {
   activeGroupIds?: number[]
 }
 
-type SystemChunkRow = {
-  text?: unknown
-  _distance?: unknown
-  systemDocId?: unknown
-  globalDocId?: unknown
-  groupId?: unknown
-  chunkIndex?: unknown
-  category?: unknown
-  groupName?: unknown
+type NormalizedSystemChunkRow = {
+  text: string
+  distance: number
+  systemDocId: number
+  globalDocId: number
+  groupId: number | null
+  chunkIndex?: number
+  category: string
+  groupName: string
 }
 
 async function getDb(): Promise<lancedb.Connection> {
@@ -54,8 +57,15 @@ async function embed(text: string): Promise<number[]> {
   return getEmbedding(text)
 }
 
+export function resolveEmbedBatchConcurrency(value = process.env.EMBED_BATCH_CONCURRENCY): number {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_EMBED_BATCH_CONCURRENCY
+  return Math.min(parsed, MAX_EMBED_BATCH_CONCURRENCY)
+}
+
 async function embedBatch(texts: string[]): Promise<number[][]> {
-  return Promise.all(texts.map((t) => getEmbedding(t)))
+  const limit = pLimit(resolveEmbedBatchConcurrency())
+  return Promise.all(texts.map((text) => limit(() => embed(text))))
 }
 
 async function maybeCreateVectorIndex(table: lancedb.Table): Promise<void> {
@@ -123,6 +133,59 @@ function normalizeIds(ids: number[]): number[] {
   return Array.from(
     new Set(ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))
   )
+}
+
+export function normalizeSystemChunkRow(row: unknown): NormalizedSystemChunkRow | null {
+  if (!row || typeof row !== 'object') {
+    logger.warn('Vector DB ignored invalid system chunk row', { reason: 'not_object' })
+    return null
+  }
+
+  const raw = row as Record<string, unknown>
+  const text = typeof raw.text === 'string' ? raw.text : undefined
+  const systemDocId = toPositiveInteger(raw.systemDocId)
+  const globalDocId = toPositiveInteger(raw.globalDocId)
+
+  if (!text || !systemDocId || !globalDocId) {
+    logger.warn('Vector DB ignored invalid system chunk row', {
+      reason: 'missing_required_fields',
+      hasText: typeof raw.text === 'string',
+      systemDocId: raw.systemDocId,
+      globalDocId: raw.globalDocId
+    })
+    return null
+  }
+
+  const distance = Number(raw._distance ?? 0)
+  return {
+    text,
+    distance: Number.isFinite(distance) ? distance : 0,
+    systemDocId,
+    globalDocId,
+    groupId:
+      raw.groupId === null || raw.groupId === undefined ? null : toIntegerOrNull(raw.groupId),
+    chunkIndex:
+      raw.chunkIndex === null || raw.chunkIndex === undefined
+        ? undefined
+        : toIntegerOrUndefined(raw.chunkIndex),
+    category: typeof raw.category === 'string' ? raw.category : '',
+    groupName: typeof raw.groupName === 'string' ? raw.groupName : ''
+  }
+}
+
+function toPositiveInteger(value: unknown): number | undefined {
+  const numberValue = Number(value)
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : undefined
+}
+
+function toIntegerOrNull(value: unknown): number | null {
+  const numberValue = Number(value)
+  return Number.isInteger(numberValue) ? numberValue : null
+}
+
+function toIntegerOrUndefined(value: unknown): number | undefined {
+  const numberValue = Number(value)
+  return Number.isInteger(numberValue) ? numberValue : undefined
 }
 
 function sqlStringLiteral(value: string): string {
@@ -224,24 +287,25 @@ export async function searchSystemChunks(
 
   const queryVec = await embed(query)
   const filter = buildSystemChunkFilter(options)
-  const results = (await table
+  const results = await table
     .search(queryVec)
     .where(filter)
     .limit(options.k ?? VECTOR_SEARCH_K)
-    .toArray()) as SystemChunkRow[]
-
-  const hits = results.map((r) => {
-    const distance = Number(r._distance ?? 0)
-    return {
-      text: String(r.text ?? ''),
-      score: 1 / (1 + distance * distance),
-      systemDocId: Number(r.systemDocId),
-      globalDocId: Number(r.globalDocId),
-      groupId: r.groupId === null || r.groupId === undefined ? null : Number(r.groupId),
-      category: String(r.category ?? ''),
-      groupName: String(r.groupName ?? '')
-    }
+    .toArray()
+  const normalizedRows = results.flatMap((row) => {
+    const normalized = normalizeSystemChunkRow(row)
+    return normalized ? [normalized] : []
   })
+
+  const hits = normalizedRows.map((r) => ({
+    text: r.text,
+    score: 1 / (1 + r.distance * r.distance),
+    systemDocId: r.systemDocId,
+    globalDocId: r.globalDocId,
+    groupId: r.groupId,
+    category: r.category,
+    groupName: r.groupName
+  }))
 
   if (hits.length > 0) {
     logger.info('Vector DB system chunk search hits', {
@@ -262,10 +326,7 @@ export async function searchSystemChunks(
         groupName: asciiLogText(hit.groupName),
         category: hit.category,
         score: Number(hit.score.toFixed(4)),
-        chunkIndex:
-          results[index]?.chunkIndex === null || results[index]?.chunkIndex === undefined
-            ? undefined
-            : Number(results[index]?.chunkIndex)
+        chunkIndex: normalizedRows[index]?.chunkIndex
       }))
     })
   }

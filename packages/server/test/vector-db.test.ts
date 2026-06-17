@@ -43,6 +43,7 @@ vi.mock('../src/lib/logger', () => ({
 describe('vector DB indexing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.EMBED_BATCH_CONCURRENCY
     getEmbedding.mockResolvedValue([0.1, 0.2, 0.3])
     ivfPq.mockImplementation((options) => ({ type: 'ivfPq', options }))
     connect.mockResolvedValue({ tableNames, createTable, openTable, dropTable })
@@ -145,6 +146,38 @@ describe('vector DB indexing', () => {
     expect(createTable).not.toHaveBeenCalled()
   })
 
+  it('resolves embed batch concurrency from environment bounds', async () => {
+    const { resolveEmbedBatchConcurrency } = await import('../src/lib/document/vector-db')
+
+    expect(resolveEmbedBatchConcurrency(undefined)).toBe(4)
+    expect(resolveEmbedBatchConcurrency('abc')).toBe(4)
+    expect(resolveEmbedBatchConcurrency('0')).toBe(4)
+    expect(resolveEmbedBatchConcurrency('2.5')).toBe(4)
+    expect(resolveEmbedBatchConcurrency('8')).toBe(8)
+    expect(resolveEmbedBatchConcurrency('32')).toBe(16)
+  })
+
+  it('limits concurrent embedding calls during batch indexing', async () => {
+    process.env.EMBED_BATCH_CONCURRENCY = '2'
+    tableNames.mockResolvedValue([])
+    countRows.mockResolvedValue(5)
+    let active = 0
+    let maxActive = 0
+    getEmbedding.mockImplementation(async () => {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      active -= 1
+      return [0.1, 0.2, 0.3]
+    })
+
+    const { indexSystemDocumentChunks } = await import('../src/lib/document/vector-db')
+    await indexSystemDocumentChunks(55, 5, 1, makeChunks(5), 'unknown', '默认')
+
+    expect(getEmbedding).toHaveBeenCalledTimes(5)
+    expect(maxActive).toBeLessThanOrEqual(2)
+  })
+
   it('prefilters system search by active state and enabled group ids', async () => {
     tableNames.mockResolvedValue(['system_chunks'])
     toArray.mockResolvedValue([
@@ -198,6 +231,65 @@ describe('vector DB indexing', () => {
           })
         ]
       })
+    )
+  })
+
+  it('normalizes system chunk rows and rejects invalid required fields', async () => {
+    const { normalizeSystemChunkRow } = await import('../src/lib/document/vector-db')
+
+    expect(
+      normalizeSystemChunkRow({
+        text: '系统知识',
+        _distance: '0.5',
+        systemDocId: '7',
+        globalDocId: 4,
+        groupId: null,
+        chunkIndex: '2',
+        category: 'resume',
+        groupName: '默认'
+      })
+    ).toEqual({
+      text: '系统知识',
+      distance: 0.5,
+      systemDocId: 7,
+      globalDocId: 4,
+      groupId: null,
+      chunkIndex: 2,
+      category: 'resume',
+      groupName: '默认'
+    })
+
+    expect(normalizeSystemChunkRow({ text: '缺少 id', globalDocId: 4 })).toBeNull()
+    expect(loggerWarn).toHaveBeenCalledWith(
+      'Vector DB ignored invalid system chunk row',
+      expect.objectContaining({ reason: 'missing_required_fields' })
+    )
+  })
+
+  it('filters invalid system chunk rows from search results', async () => {
+    tableNames.mockResolvedValue(['system_chunks'])
+    toArray.mockResolvedValue([
+      { text: '缺少文档 id', globalDocId: 4, groupId: 3 },
+      {
+        text: '可用系统知识',
+        _distance: 0.5,
+        systemDocId: 7,
+        globalDocId: 4,
+        groupId: 3,
+        chunkIndex: 2,
+        category: 'resume',
+        groupName: '启用分组'
+      }
+    ])
+
+    const { searchSystemChunks } = await import('../src/lib/document/vector-db')
+    const results = await searchSystemChunks('候选人经历', { activeGroupIds: [3] })
+
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ text: '可用系统知识', systemDocId: 7 })
+    expect(loggerWarn).toHaveBeenCalledWith(
+      'Vector DB ignored invalid system chunk row',
+      expect.objectContaining({ reason: 'missing_required_fields' })
     )
   })
 

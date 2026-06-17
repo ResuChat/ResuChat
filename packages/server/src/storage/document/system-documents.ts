@@ -1,4 +1,5 @@
 import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { normalizeDocumentCategory } from '@resuchat/shared'
 import { db, schema } from '../../lib/db'
 import type { SystemDocRecord, SystemDocumentGroup } from '../../types/domain'
 
@@ -306,6 +307,30 @@ export async function updateSystemDocumentIndexState(
   await db.update(schema.systemDocuments).set(changes).where(eq(schema.systemDocuments.id, id))
 }
 
+export async function requeuePendingSystemDocuments(ids: number[]): Promise<number[]> {
+  const uniqueIds = Array.from(new Set(ids)).filter((id) => Number.isInteger(id) && id > 0)
+  if (uniqueIds.length === 0) return []
+
+  const rows = await db
+    .update(schema.systemDocuments)
+    .set({
+      indexStatus: 'pending',
+      errorMessage: null,
+      chunksCount: 0,
+      indexedAt: null,
+      updatedAt: Date.now()
+    })
+    .where(
+      and(
+        inArray(schema.systemDocuments.id, uniqueIds),
+        inArray(schema.systemDocuments.indexStatus, ['pending', 'indexing'])
+      )
+    )
+    .returning({ id: schema.systemDocuments.id })
+
+  return rows.map((row) => row.id)
+}
+
 export async function getSystemDocumentIndexTarget(id: number): Promise<
   | {
       id: number
@@ -423,7 +448,7 @@ export async function listSystemDocuments(): Promise<SystemDocRecord[]> {
     id: r.systemDoc.id,
     global_doc_id: r.systemDoc.globalDocId,
     group_id: r.systemDoc.groupId,
-    category: r.systemDoc.category as 'resume' | 'job' | 'unknown',
+    category: normalizeDocumentCategory(r.systemDoc.category),
     group_name: r.systemDoc.groupName,
     local_name: r.systemDoc.localName,
     active: r.systemDoc.active,
@@ -457,7 +482,7 @@ export async function getSystemDocumentById(id: number): Promise<SystemDocRecord
     id: row.systemDoc.id,
     global_doc_id: row.systemDoc.globalDocId,
     group_id: row.systemDoc.groupId,
-    category: row.systemDoc.category as 'resume' | 'job' | 'unknown',
+    category: normalizeDocumentCategory(row.systemDoc.category),
     group_name: row.systemDoc.groupName,
     local_name: row.systemDoc.localName,
     active: row.systemDoc.active,

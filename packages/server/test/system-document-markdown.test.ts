@@ -27,6 +27,7 @@ const parseFileContent = vi.fn()
 const assertSupportedUploadFile = vi.fn()
 const publishWsEvent = vi.fn()
 const queueAdd = vi.fn()
+const requeuePendingSystemDocuments = vi.fn()
 const requeueSystemDocument = vi.fn()
 const updateDocActive = vi.fn()
 const updateGroup = vi.fn()
@@ -106,6 +107,7 @@ vi.mock('../src/storage/document/file-manager', () => ({
   getSystemDocumentIndexTarget,
   listSystemDocumentGroups: listGroups,
   listSystemDocuments: listSystemDocs,
+  requeuePendingSystemDocuments,
   requeueSystemDocument,
   setSystemDocumentGroupsActive: vi.fn(),
   updateSystemDocumentActive: updateDocActive,
@@ -130,6 +132,7 @@ describe('system document markdown indexing', () => {
     listSystemDocs.mockResolvedValue([])
     publishWsEvent.mockResolvedValue(undefined)
     queueAdd.mockResolvedValue({ id: 'job-1' })
+    requeuePendingSystemDocuments.mockResolvedValue([])
     isSystemVectorTableSchemaStaleError.mockReturnValue(false)
     updateSystemDocumentIndexState.mockResolvedValue(undefined)
     updateSystemChunksGroupName.mockResolvedValue(0)
@@ -309,25 +312,15 @@ describe('system document markdown indexing', () => {
         original_name: 'done.txt'
       }
     ])
+    requeuePendingSystemDocuments.mockResolvedValue([12, 21])
 
     const { requeuePendingSystemDocumentIndexing } =
       await import('../src/services/document/admin.service')
     const count = await requeuePendingSystemDocumentIndexing()
 
     expect(count).toBe(2)
-    expect(updateSystemDocumentIndexState).toHaveBeenCalledWith(12, {
-      status: 'pending',
-      chunksCount: 0,
-      errorMessage: null,
-      indexedAt: null
-    })
-    expect(updateSystemDocumentIndexState).toHaveBeenCalledWith(21, {
-      status: 'pending',
-      chunksCount: 0,
-      errorMessage: null,
-      indexedAt: null
-    })
-    expect(updateSystemDocumentIndexState).not.toHaveBeenCalledWith(33, expect.any(Object))
+    expect(requeuePendingSystemDocuments).toHaveBeenCalledWith([12, 21])
+    expect(updateSystemDocumentIndexState).not.toHaveBeenCalled()
     expect(queueAdd).toHaveBeenCalledWith('index', { systemDocId: 12 })
     expect(queueAdd).toHaveBeenCalledWith('index', { systemDocId: 21 })
     expect(queueAdd).not.toHaveBeenCalledWith('index', { systemDocId: 33 })

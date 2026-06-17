@@ -44,9 +44,10 @@ const SYSTEM_VECTOR_SCHEMA_STALE_MESSAGE =
 export async function uploadSystemDocument(
   fileBuffer: Buffer,
   originalName: string,
-  groupId: number
+  groupId: number,
+  mimetype?: string
 ): Promise<UploadResult> {
-  assertSupportedUploadFile(originalName)
+  assertSupportedUploadFile(originalName, mimetype)
   const group = await getSystemDocumentGroup(groupId)
   if (!group) throw new ValidationError('System document group not found')
 
@@ -233,29 +234,23 @@ export async function listSystemDocuments(): Promise<
 }
 
 export async function requeuePendingSystemDocumentIndexing(): Promise<number> {
-  const { listSystemDocuments: listSystemDocs, updateSystemDocumentIndexState } =
+  const { listSystemDocuments: listSystemDocs, requeuePendingSystemDocuments } =
     await import('../../../storage/document/file-manager')
   const docs = await listSystemDocs()
   const targets = docs.filter(
     (doc) => doc.index_status === 'pending' || doc.index_status === 'indexing'
   )
+  const requeuedIds = await requeuePendingSystemDocuments(targets.map((doc) => doc.id))
 
-  for (const doc of targets) {
-    await updateSystemDocumentIndexState(doc.id, {
-      status: 'pending',
-      chunksCount: 0,
-      errorMessage: null,
-      indexedAt: null
-    })
-    const job = await systemDocIndexQueue.add('index', { systemDocId: doc.id })
+  for (const id of requeuedIds) {
+    const job = await systemDocIndexQueue.add('index', { systemDocId: id })
     logger.info('System document indexing requeued', {
-      systemDocId: doc.id,
-      previousStatus: doc.index_status,
+      systemDocId: id,
       jobId: job.id
     })
   }
 
-  return targets.length
+  return requeuedIds.length
 }
 
 export async function getSystemDocument(
