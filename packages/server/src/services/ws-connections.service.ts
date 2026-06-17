@@ -39,6 +39,10 @@ export function sendToRole(role: UserRole, message: WsMessage): void {
   }
 }
 
+export function updateWsClientRole(userId: string, role: UserRole): void {
+  if (clients.has(userId)) clientRoles.set(userId, role)
+}
+
 export function hasActiveConnection(userId: string): boolean {
   const set = clients.get(userId)
   return !!set && set.size > 0

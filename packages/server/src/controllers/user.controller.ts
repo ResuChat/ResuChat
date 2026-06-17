@@ -8,6 +8,11 @@ import {
   changePassword,
   uploadAvatar
 } from '../services/user.service'
+import {
+  listUserNotifications,
+  markAllUserNotificationsRead,
+  markUserNotificationRead
+} from '../storage/user/notifications'
 import type { UpdateProfileRequest, BindPhoneRequest, ChangePasswordRequest } from '../dto/user.dto'
 
 export const profile: RequestHandler = async (req: Request, res: Response) => {
@@ -35,4 +40,22 @@ export const avatar: RequestHandler = async (req: Request, res: Response) => {
   if (!file) throw new ValidationError('No file')
   const url = await uploadAvatar((req as AuthRequest).auth!.userId, file)
   res.json({ avatar: url })
+}
+
+export const notifications: RequestHandler = async (req: Request, res: Response) => {
+  const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined
+  const result = await listUserNotifications((req as AuthRequest).auth!.userId, limitRaw)
+  res.json(result)
+}
+
+export const notificationRead: RequestHandler = async (req: Request, res: Response) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id <= 0) throw new ValidationError('Invalid notification id')
+  await markUserNotificationRead((req as AuthRequest).auth!.userId, id)
+  res.json({ message: 'Notification read' })
+}
+
+export const notificationsReadAll: RequestHandler = async (req: Request, res: Response) => {
+  const count = await markAllUserNotificationsRead((req as AuthRequest).auth!.userId)
+  res.json({ message: 'Notifications read', count })
 }

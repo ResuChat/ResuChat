@@ -11,7 +11,8 @@ import {
   registerWsClient,
   sendToRole,
   sendToUser,
-  unregisterWsClient
+  unregisterWsClient,
+  updateWsClientRole
 } from './ws-connections.service'
 
 let server: WebSocketServer | null = null
@@ -105,6 +106,11 @@ function startEventSubscriber() {
       }
       if (event.target === 'role') {
         sendToRole(event.role, event.message)
+        return
+      }
+      if (event.target === 'user_role') {
+        updateWsClientRole(event.userId, event.role)
+        sendToUser(event.userId, event.message)
       }
     } catch (error) {
       logger.error('WebSocket event dispatch failed', { error })

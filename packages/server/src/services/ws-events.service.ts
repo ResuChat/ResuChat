@@ -12,14 +12,17 @@ export type WsMessage = {
 export type RoutedWsEvent =
   | { target: 'user'; userId: string; message: WsMessage }
   | { target: 'role'; role: UserRole; message: WsMessage }
+  | { target: 'user_role'; userId: string; role: UserRole; message: WsMessage }
 
-export async function publishWsEvent(event: RoutedWsEvent): Promise<void> {
-  if (!redis) return
+export async function publishWsEvent(event: RoutedWsEvent): Promise<boolean> {
+  if (!redis) return false
   try {
     await waitRedisReady()
     await redis.publish(WS_EVENTS_CHANNEL, JSON.stringify(event))
+    return true
   } catch (error) {
     logger.error('WebSocket event publish failed', { error, eventType: event.message.type })
+    return false
   }
 }
 

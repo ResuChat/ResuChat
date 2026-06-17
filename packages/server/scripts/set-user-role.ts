@@ -1,6 +1,7 @@
 import { eq, or } from 'drizzle-orm'
 import { closeDb, db, schema } from '../src/lib/db'
 import type { UserRole } from '../src/types/domain'
+import { updateUserRole } from '../src/services/user-role.service'
 
 const allowedRoles = new Set<UserRole>(['normal', 'premium', 'admin'])
 
@@ -34,10 +35,7 @@ async function main() {
     return
   }
 
-  await db
-    .update(schema.users)
-    .set({ role, updatedAt: Date.now() })
-    .where(eq(schema.users.id, user.id))
+  await updateUserRole({ userId: user.id, role })
   console.log(
     `Role updated: id=${user.id}, email=${user.email ?? '-'}, phone=${user.phone ?? '-'}, role=${role}`
   )
