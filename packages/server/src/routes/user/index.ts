@@ -8,7 +8,10 @@ import {
   update,
   phoneBind,
   passwordChange,
-  avatar
+  avatar,
+  notifications,
+  notificationRead,
+  notificationsReadAll
 } from '../../controllers/user.controller'
 
 const authenticate = createAuthWithUserMiddleware()
@@ -19,5 +22,8 @@ router.patch('/profile', authenticate, validateBody(UpdateProfileRequest), updat
 router.patch('/bind-phone', authenticate, validateBody(BindPhoneRequest), phoneBind)
 router.patch('/change-password', authenticate, validateBody(ChangePasswordRequest), passwordChange)
 router.post('/avatar', authenticate, upload.single('file'), avatar)
+router.get('/notifications', authenticate, notifications)
+router.patch('/notifications/:id/read', authenticate, notificationRead)
+router.patch('/notifications/read-all', authenticate, notificationsReadAll)
 
 export default router
