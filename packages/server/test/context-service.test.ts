@@ -71,4 +71,36 @@ describe('buildRagContext', () => {
     expect(context.referenceDocContent).toContain('系统知识 C')
     expect(context.referenceDocContent).not.toContain('系统知识 D')
   })
+
+  it('loads reference document names once when both reference chunk branches need them', async () => {
+    getConversationChunksWithTypes.mockResolvedValue([
+      { role: 'original', category: 'resume', pageContent: '原简历内容' },
+      { role: 'reference', category: 'resume', pageContent: '优秀简历内容', refId: 11 },
+      { role: 'reference', category: 'resume', pageContent: '优秀简历补充内容', refId: 11 },
+      { role: 'reference', category: 'job', pageContent: '岗位 JD 内容', refId: 12 },
+      { role: 'reference', category: 'job', pageContent: '岗位 JD 补充内容', refId: 12 }
+    ])
+    getConversationDocsByType.mockResolvedValue([
+      { id: 11, local_name: '优秀简历.pdf', original_name: 'resume.pdf' },
+      { id: 12, local_name: '', original_name: 'job.md' }
+    ])
+
+    const { buildRagContext } = await import('../src/services/chat/context.service')
+
+    const context = await buildRagContext({
+      query: '怎么优化项目经历',
+      conversationId: 'conv_with_named_refs'
+    })
+
+    expect(getConversationDocsByType).toHaveBeenCalledTimes(1)
+    expect(getConversationDocsByType).toHaveBeenCalledWith('conv_with_named_refs', 'reference')
+    expect(context.excellentResumeContent.match(/--- 优秀简历\.pdf ---/g)).toHaveLength(1)
+    expect(context.excellentResumeContent).toContain('--- 优秀简历.pdf ---')
+    expect(context.excellentResumeContent).toContain('优秀简历内容')
+    expect(context.excellentResumeContent).toContain('优秀简历补充内容')
+    expect(context.referenceDocContent.match(/--- job\.md ---/g)).toHaveLength(1)
+    expect(context.referenceDocContent).toContain('--- job.md ---')
+    expect(context.referenceDocContent).toContain('岗位 JD 内容')
+    expect(context.referenceDocContent).toContain('岗位 JD 补充内容')
+  })
 })

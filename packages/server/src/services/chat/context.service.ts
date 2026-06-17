@@ -15,6 +15,30 @@ import { logger } from '../../lib/logger'
 
 export type { RagContext } from '../../types/api'
 
+type NamedChunk = { pageContent: string; refId?: number }
+
+function mergeNamedReferenceChunks(
+  chunks: NamedChunk[],
+  nameByRefId: Record<number, string>
+): string {
+  const groups: Record<number, { pageContent: string }[]> = {}
+  for (const chunk of chunks) {
+    const key = chunk.refId || 0
+    if (!groups[key]) groups[key] = []
+    groups[key].push(chunk)
+  }
+
+  const parts: string[] = []
+  for (const [refIdStr, groupedChunks] of Object.entries(groups)) {
+    const refId = Number(refIdStr)
+    const name = refId ? nameByRefId[refId] : undefined
+    const merged = mergeOverlappingChunks(groupedChunks)
+    parts.push(name ? `--- ${name} ---\n${merged}` : merged)
+  }
+
+  return parts.join('\n\n')
+}
+
 export async function buildRagContext(params: {
   query: string
   files?: MulterFile[]
@@ -53,48 +77,20 @@ export async function buildRagContext(params: {
     }
     resumeContent = mergeOverlappingChunks(resumeChunks)
 
-    if (excellentResumeChunks.length > 0) {
+    const nameByRefId: Record<number, string> = {}
+    if (excellentResumeChunks.length > 0 || referenceDocChunks.length > 0) {
       const refDocs = await getConversationDocsByType(conversationId, 'reference')
-      const nameByRefId: Record<number, string> = {}
       for (const d of refDocs) {
         nameByRefId[d.id] = d.local_name || d.original_name
       }
-      const groups: Record<number, { pageContent: string }[]> = {}
-      for (const c of excellentResumeChunks) {
-        const key = c.refId || 0
-        if (!groups[key]) groups[key] = []
-        groups[key].push(c)
-      }
-      const parts: string[] = []
-      for (const [refIdStr, chunks] of Object.entries(groups)) {
-        const rid = Number(refIdStr)
-        const name = rid ? nameByRefId[rid] : undefined
-        const merged = mergeOverlappingChunks(chunks)
-        parts.push(name ? `--- ${name} ---\n${merged}` : merged)
-      }
-      excellentResumeContent = parts.join('\n\n')
+    }
+
+    if (excellentResumeChunks.length > 0) {
+      excellentResumeContent = mergeNamedReferenceChunks(excellentResumeChunks, nameByRefId)
     }
 
     if (referenceDocChunks.length > 0) {
-      const refDocs = await getConversationDocsByType(conversationId, 'reference')
-      const nameByRefId: Record<number, string> = {}
-      for (const d of refDocs) {
-        nameByRefId[d.id] = d.local_name || d.original_name
-      }
-      const groups: Record<number, { pageContent: string }[]> = {}
-      for (const c of referenceDocChunks) {
-        const key = c.refId || 0
-        if (!groups[key]) groups[key] = []
-        groups[key].push(c)
-      }
-      const parts: string[] = []
-      for (const [refIdStr, chunks] of Object.entries(groups)) {
-        const rid = Number(refIdStr)
-        const name = rid ? nameByRefId[rid] : undefined
-        const merged = mergeOverlappingChunks(chunks)
-        parts.push(name ? `--- ${name} ---\n${merged}` : merged)
-      }
-      referenceDocContent = parts.join('\n\n')
+      referenceDocContent = mergeNamedReferenceChunks(referenceDocChunks, nameByRefId)
     }
   } else {
     const conversationDocs = await getConversationDocs(conversationId)
