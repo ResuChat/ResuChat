@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { count, eq } from 'drizzle-orm'
+import { count, eq, lt } from 'drizzle-orm'
 import { db, schema } from '../../lib/db'
 import type { User, UserRole } from '../../types/domain'
 
@@ -118,6 +118,14 @@ export async function recordLogin(
     loginAt: now
   })
   await db.update(schema.users).set({ updatedAt: now }).where(eq(schema.users.id, userId))
+}
+
+export async function deleteLoginHistoryBefore(cutoffLoginAt: number): Promise<number> {
+  const deleted = await db
+    .delete(schema.loginHistory)
+    .where(lt(schema.loginHistory.loginAt, cutoffLoginAt))
+    .returning({ id: schema.loginHistory.id })
+  return deleted.length
 }
 
 export async function updateUserProfile(

@@ -1,5 +1,11 @@
 import { Worker, type Job } from 'bullmq'
-import { CONVERSATION_TRASH_PURGE_INTERVAL_MS, REDIS_URL, SHUTDOWN_TIMEOUT } from '../lib/config'
+import {
+  CONVERSATION_TRASH_PURGE_INTERVAL_MS,
+  LOGIN_HISTORY_PURGE_INTERVAL_MS,
+  LOGIN_HISTORY_RETENTION_MS,
+  REDIS_URL,
+  SHUTDOWN_TIMEOUT
+} from '../lib/config'
 import {
   parseUserDocumentFromFile,
   resetParsingUserDocuments,
@@ -12,11 +18,13 @@ import {
 import { logger } from '../lib/logger'
 import { closeDb } from '../lib/db'
 import { purgeExpiredDeletedConversations } from '../services/document/conversation.service'
+import { deleteLoginHistoryBefore } from '../storage/user/users'
 
 const connection = { url: REDIS_URL }
 const workers: Worker[] = []
 let startupPromise: Promise<void> | null = null
 let conversationTrashPurgeInterval: NodeJS.Timeout | null = null
+let loginHistoryPurgeInterval: NodeJS.Timeout | null = null
 
 type SystemDocIndexJob = { systemDocId: number }
 
@@ -137,6 +145,7 @@ async function runWorkerStartupTasks(): Promise<void> {
     logger.warn('Queue requeued pending system documents', { count: requeuedSystemDocs })
   }
   await runConversationTrashPurge()
+  await runLoginHistoryPurge()
 }
 
 async function runConversationTrashPurge(): Promise<void> {
@@ -158,6 +167,26 @@ function scheduleConversationTrashPurge(): void {
   conversationTrashPurgeInterval.unref()
 }
 
+async function runLoginHistoryPurge(): Promise<void> {
+  try {
+    const cutoffLoginAt = Date.now() - LOGIN_HISTORY_RETENTION_MS
+    const deletedCount = await deleteLoginHistoryBefore(cutoffLoginAt)
+    if (deletedCount > 0) {
+      logger.info('Expired login history purged', { deletedCount, cutoffLoginAt })
+    }
+  } catch (error) {
+    logger.error('Expired login history purge failed', { error })
+  }
+}
+
+function scheduleLoginHistoryPurge(): void {
+  if (loginHistoryPurgeInterval) return
+  loginHistoryPurgeInterval = setInterval(() => {
+    void runLoginHistoryPurge()
+  }, LOGIN_HISTORY_PURGE_INTERVAL_MS)
+  loginHistoryPurgeInterval.unref()
+}
+
 export async function startWorkers(): Promise<void> {
   if (startupPromise) return await startupPromise
 
@@ -166,6 +195,7 @@ export async function startWorkers(): Promise<void> {
     logger.info('Queue workers started')
     await runWorkerStartupTasks()
     scheduleConversationTrashPurge()
+    scheduleLoginHistoryPurge()
   })()
 
   return await startupPromise
@@ -181,6 +211,10 @@ export async function closeWorkers(force = false): Promise<void> {
   if (conversationTrashPurgeInterval) {
     clearInterval(conversationTrashPurgeInterval)
     conversationTrashPurgeInterval = null
+  }
+  if (loginHistoryPurgeInterval) {
+    clearInterval(loginHistoryPurgeInterval)
+    loginHistoryPurgeInterval = null
   }
   await Promise.all(
     workers.map(async (worker) => {
