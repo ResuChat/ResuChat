@@ -48,6 +48,7 @@ export interface QueuedRequest {
   status: 'pending' | 'processing' | 'completed' | 'failed'
   disabledKey?: string
   wasSupplement?: boolean
+  refreshReferencesOnComplete?: boolean
   dragging?: boolean
   dragOver?: boolean
   meta?: { text?: string }
