@@ -1,5 +1,9 @@
 export type DocumentCategory = 'resume' | 'job' | 'unknown'
 
+export function normalizeDocumentCategory(value: unknown): DocumentCategory {
+  return value === 'resume' || value === 'job' || value === 'unknown' ? value : 'unknown'
+}
+
 export type ConversationDocumentRole = 'original' | 'reference' | 'modified'
 
 export interface DocumentRecord {
