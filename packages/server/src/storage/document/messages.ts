@@ -1,8 +1,11 @@
 import { and, asc, count, desc, eq, lt } from 'drizzle-orm'
+import { normalizeMessageAttachments } from '@resuchat/shared'
 import { db, schema } from '../../lib/db'
 import type { MessageAttachment, MessageRecord } from '../../types/domain'
 
 export type { MessageRecord } from '../../types/domain'
+
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 export async function buildHistoryPrompt(conversationId: string): Promise<string> {
   const summaries = await db
@@ -65,8 +68,30 @@ export async function storeMessage(
   displayContent?: string,
   attachments?: MessageAttachment[]
 ) {
+  await storeMessageInTransaction(
+    db,
+    conversationId,
+    role,
+    content,
+    reasoning,
+    clientId,
+    displayContent,
+    attachments
+  )
+}
+
+export async function storeMessageInTransaction(
+  client: typeof db | DbTransaction,
+  conversationId: string,
+  role: 'user' | 'assistant',
+  content: string,
+  reasoning?: string,
+  clientId?: string,
+  displayContent?: string,
+  attachments?: MessageAttachment[]
+) {
   const now = Date.now()
-  await db.insert(schema.messages).values({
+  await client.insert(schema.messages).values({
     conversationId,
     role,
     content,
@@ -77,7 +102,7 @@ export async function storeMessage(
     attachments: attachments?.length ? attachments : null,
     createdAt: now
   })
-  await db
+  await client
     .update(schema.conversations)
     .set({ updatedAt: now })
     .where(eq(schema.conversations.id, conversationId))
@@ -250,42 +275,4 @@ function mapMessageRecord(m: {
     attachments: normalizeMessageAttachments(m.attachments),
     created_at: Number(m.createdAt)
   }
-}
-
-function normalizeMessageAttachments(value: unknown): MessageAttachment[] | undefined {
-  if (!Array.isArray(value)) return undefined
-
-  const attachments = value.flatMap((item): MessageAttachment[] => {
-    if (!item || typeof item !== 'object') return []
-    const raw = item as Record<string, unknown>
-    if (raw.type !== 'reference') return []
-    if (raw.source !== 'upload' && raw.source !== 'library') return []
-    if (typeof raw.name !== 'string' || raw.name.trim().length === 0) return []
-
-    return [
-      {
-        type: 'reference',
-        source: raw.source,
-        name: raw.name,
-        refId: optionalPositiveInteger(raw.refId),
-        globalDocId: optionalPositiveInteger(raw.globalDocId),
-        docId: optionalPositiveInteger(raw.docId),
-        fileType: typeof raw.fileType === 'string' ? raw.fileType : undefined,
-        fileSize: optionalNonNegativeInteger(raw.fileSize),
-        category: typeof raw.category === 'string' ? raw.category : undefined
-      }
-    ]
-  })
-
-  return attachments.length > 0 ? attachments : undefined
-}
-
-function optionalPositiveInteger(value: unknown): number | undefined {
-  const numberValue = Number(value)
-  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : undefined
-}
-
-function optionalNonNegativeInteger(value: unknown): number | undefined {
-  const numberValue = Number(value)
-  return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : undefined
 }

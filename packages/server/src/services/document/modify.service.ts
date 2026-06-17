@@ -11,19 +11,21 @@ import {
 import { replaceText } from '../../lib/pdf/markdown'
 import { DocumentLoader } from '../../lib/document/loader'
 import {
-  addFileToConversation,
-  cleanupOldVersions,
-  getConversationDocsByType
+  cleanupOldVersionsInTransaction,
+  getConversationDocsByType,
+  insertConversationFileRef,
+  prepareConversationFile
 } from '../../storage/document/file-manager'
 import {
   getConversationChunksWithTypes,
-  setConversationChunksWithTypes,
-  storeMessage
+  setConversationChunksWithTypesInTransaction,
+  storeMessageInTransaction
 } from '../../storage/repository'
 import { mergeOverlappingChunks } from '../../lib/text'
 import { extractPdfText } from '../../lib/pdf/extractor'
 import { logger } from '../../lib/logger'
 import { triggerAutoSummary } from '../chat/summary.service'
+import { db } from '../../lib/db'
 
 interface Optimization {
   field: string
@@ -84,7 +86,6 @@ export function createApplyStream(params: ApplyModificationParams) {
 
       const userDisplay = `采纳建议修改：${field}`
       const userFull = `采纳建议：${field}\n原文：${current}\n建议：${suggestion}${reason ? '\n原因：' + reason : ''}`
-      await storeMessage(conversationId, 'user', userFull, undefined, clientIds?.user, userDisplay)
 
       const t0 = performance.now()
       const promptFn = (type || 'apply') === 'accept' ? buildAcceptPrompt : buildApplyPrompt
@@ -116,17 +117,106 @@ export function createApplyStream(params: ApplyModificationParams) {
       const pdfBuffer = Buffer.from(await generateResumePDF(structuredClone(aiContent)))
 
       const fileName = `resume_${Date.now()}.pdf`
-      const fileResult = await addFileToConversation(
-        conversationId,
-        Buffer.from(pdfBuffer),
-        fileName,
-        'pdf',
-        'modified',
-        undefined,
-        newFullText
-      )
+      const preparedFile = prepareConversationFile(Buffer.from(pdfBuffer), 'pdf')
 
-      await cleanupOldVersions(conversationId, 'modified', 5)
+      const updatedRAG = new DocumentLoader()
+      await updatedRAG.loadDocumentsFromText([
+        { text: newFullText, metadata: { source: 'updated' } }
+      ])
+      const updatedChunks = updatedRAG.chunks.map((chunk) => ({
+        pageContent: chunk.pageContent,
+        metadata: chunk.metadata,
+        role: 'modified' as const,
+        category: 'resume'
+      }))
+
+      let transactionResult: {
+        insertedFile: { refId: number; globalDocId: number; version: number }
+        filesToDelete: string[]
+      }
+      try {
+        transactionResult = await db.transaction(async (tx) => {
+          const insertedFile = await insertConversationFileRef(tx, {
+            conversationId,
+            preparedFile,
+            originalName: fileName,
+            fileType: 'pdf',
+            role: 'modified',
+            contentSnapshot: newFullText
+          })
+
+          const filesToDelete = await cleanupOldVersionsInTransaction(
+            tx,
+            conversationId,
+            'modified',
+            5
+          )
+
+          await setConversationChunksWithTypesInTransaction(
+            tx,
+            conversationId,
+            updatedChunks,
+            insertedFile.refId
+          )
+
+          await storeMessageInTransaction(
+            tx,
+            conversationId,
+            'user',
+            userFull,
+            undefined,
+            clientIds?.user,
+            userDisplay
+          )
+          await storeMessageInTransaction(
+            tx,
+            conversationId,
+            'assistant',
+            `正在处理「${field}」...`,
+            undefined,
+            clientIds?.processing
+          )
+          await storeMessageInTransaction(
+            tx,
+            conversationId,
+            'assistant',
+            `已采纳建议并生成修改内容`,
+            undefined,
+            assistantMsgId
+          )
+
+          return { insertedFile, filesToDelete }
+        })
+      } catch (error) {
+        if (preparedFile.isNewPhysicalFile) {
+          try {
+            if (fs.existsSync(preparedFile.filePath)) fs.unlinkSync(preparedFile.filePath)
+          } catch (cleanupError) {
+            logger.error('Failed to delete orphan modified resume file after transaction failure', {
+              conversationId,
+              field,
+              filePath: preparedFile.filePath,
+              error: cleanupError
+            })
+          }
+        }
+        throw error
+      }
+
+      const fileResult = transactionResult.insertedFile
+      for (const filePath of transactionResult.filesToDelete) {
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+        } catch (error) {
+          logger.error('Failed to delete old modified resume file after transaction commit', {
+            conversationId,
+            field,
+            filePath,
+            error
+          })
+        }
+      }
+
       logger.debug('Apply modification completed', {
         conversationId,
         field,
@@ -160,37 +250,11 @@ export function createApplyStream(params: ApplyModificationParams) {
       })
       writer.merge(toolStream)
 
-      // 重建 chunks 索引
-      const updatedRAG = new DocumentLoader()
-      await updatedRAG.loadDocumentsFromText([
-        { text: newFullText, metadata: { source: 'updated' } }
-      ])
-      const updatedChunks = updatedRAG.chunks.map((chunk) => ({
-        pageContent: chunk.pageContent,
-        metadata: chunk.metadata,
-        role: 'modified' as const,
-        category: 'resume'
-      }))
-      await setConversationChunksWithTypes(conversationId, updatedChunks)
       logger.debug('Conversation chunks rebuilt after modification', {
         conversationId,
         chunkCount: updatedRAG.chunks.length
       })
 
-      await storeMessage(
-        conversationId,
-        'assistant',
-        `正在处理「${field}」...`,
-        undefined,
-        clientIds?.processing
-      )
-      await storeMessage(
-        conversationId,
-        'assistant',
-        `已采纳建议并生成修改内容`,
-        undefined,
-        assistantMsgId
-      )
       triggerAutoSummary(conversationId)
     }
   })

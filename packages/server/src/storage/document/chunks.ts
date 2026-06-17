@@ -15,6 +15,7 @@ type ChunkInput = {
   scope?: string
   category?: string
 }
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 function sanitizeJsonValue(value: unknown): unknown {
   if (typeof value === 'string') return sanitizeDatabaseText(value)
@@ -144,44 +145,53 @@ export async function setConversationChunksWithTypes(
   chunks: ChunkInput[],
   refId?: number
 ) {
+  await db.transaction((tx) =>
+    setConversationChunksWithTypesInTransaction(tx, conversationId, chunks, refId)
+  )
+}
+
+export async function setConversationChunksWithTypesInTransaction(
+  tx: DbTransaction,
+  conversationId: string,
+  chunks: ChunkInput[],
+  refId?: number
+) {
   const now = Date.now()
-  await db.transaction(async (tx) => {
-    await tx.delete(schema.chunks).where(eq(schema.chunks.conversationId, conversationId))
-    if (chunks.length > 0) {
-      try {
-        await tx.insert(schema.chunks).values(
-          chunks.map((chunk, i) => {
-            const sanitized = sanitizeChunkForInsert(chunk)
-            const role = chunk.role || 'original'
-            return {
-              conversationId,
-              pageContent: sanitized.pageContent,
-              metadata: sanitized.metadata,
-              source: sanitized.source,
-              chunkIndex: i,
-              role,
-              refId: refId || null,
-              scope: chunk.scope || 'conversation',
-              category: chunk.category || defaultCategory(role),
-              createdAt: now
-            }
-          })
-        )
-      } catch (error) {
-        logChunkInsertFailure('setConversationChunksWithTypes', error, {
-          conversationId,
-          chunks,
-          refId,
-          startIdx: 0
+  await tx.delete(schema.chunks).where(eq(schema.chunks.conversationId, conversationId))
+  if (chunks.length > 0) {
+    try {
+      await tx.insert(schema.chunks).values(
+        chunks.map((chunk, i) => {
+          const sanitized = sanitizeChunkForInsert(chunk)
+          const role = chunk.role || 'original'
+          return {
+            conversationId,
+            pageContent: sanitized.pageContent,
+            metadata: sanitized.metadata,
+            source: sanitized.source,
+            chunkIndex: i,
+            role,
+            refId: refId || null,
+            scope: chunk.scope || 'conversation',
+            category: chunk.category || defaultCategory(role),
+            createdAt: now
+          }
         })
-        throw error
-      }
+      )
+    } catch (error) {
+      logChunkInsertFailure('setConversationChunksWithTypes', error, {
+        conversationId,
+        chunks,
+        refId,
+        startIdx: 0
+      })
+      throw error
     }
-    await tx
-      .update(schema.conversations)
-      .set({ updatedAt: now })
-      .where(eq(schema.conversations.id, conversationId))
-  })
+  }
+  await tx
+    .update(schema.conversations)
+    .set({ updatedAt: now })
+    .where(eq(schema.conversations.id, conversationId))
 }
 
 export async function appendConversationChunks(
@@ -189,49 +199,58 @@ export async function appendConversationChunks(
   chunks: ChunkInput[],
   refId?: number
 ) {
-  const now = Date.now()
-  await db.transaction(async (tx) => {
-    const [maxIdx] = await tx
-      .select({ value: max(schema.chunks.chunkIndex) })
-      .from(schema.chunks)
-      .where(eq(schema.chunks.conversationId, conversationId))
-    const startIdx = (maxIdx?.value ?? -1) + 1
+  await db.transaction((tx) =>
+    appendConversationChunksInTransaction(tx, conversationId, chunks, refId)
+  )
+}
 
-    if (chunks.length > 0) {
-      try {
-        await tx.insert(schema.chunks).values(
-          chunks.map((chunk, i) => {
-            const sanitized = sanitizeChunkForInsert(chunk)
-            const role = chunk.role || 'original'
-            return {
-              conversationId,
-              pageContent: sanitized.pageContent,
-              metadata: sanitized.metadata,
-              source: sanitized.source,
-              chunkIndex: startIdx + i,
-              role,
-              refId: refId || null,
-              scope: chunk.scope || 'conversation',
-              category: chunk.category || defaultCategory(role),
-              createdAt: now
-            }
-          })
-        )
-      } catch (error) {
-        logChunkInsertFailure('appendConversationChunks', error, {
-          conversationId,
-          chunks,
-          refId,
-          startIdx
+export async function appendConversationChunksInTransaction(
+  tx: DbTransaction,
+  conversationId: string,
+  chunks: ChunkInput[],
+  refId?: number
+) {
+  const now = Date.now()
+  const [maxIdx] = await tx
+    .select({ value: max(schema.chunks.chunkIndex) })
+    .from(schema.chunks)
+    .where(eq(schema.chunks.conversationId, conversationId))
+  const startIdx = (maxIdx?.value ?? -1) + 1
+
+  if (chunks.length > 0) {
+    try {
+      await tx.insert(schema.chunks).values(
+        chunks.map((chunk, i) => {
+          const sanitized = sanitizeChunkForInsert(chunk)
+          const role = chunk.role || 'original'
+          return {
+            conversationId,
+            pageContent: sanitized.pageContent,
+            metadata: sanitized.metadata,
+            source: sanitized.source,
+            chunkIndex: startIdx + i,
+            role,
+            refId: refId || null,
+            scope: chunk.scope || 'conversation',
+            category: chunk.category || defaultCategory(role),
+            createdAt: now
+          }
         })
-        throw error
-      }
+      )
+    } catch (error) {
+      logChunkInsertFailure('appendConversationChunks', error, {
+        conversationId,
+        chunks,
+        refId,
+        startIdx
+      })
+      throw error
     }
-    await tx
-      .update(schema.conversations)
-      .set({ updatedAt: now })
-      .where(eq(schema.conversations.id, conversationId))
-  })
+  }
+  await tx
+    .update(schema.conversations)
+    .set({ updatedAt: now })
+    .where(eq(schema.conversations.id, conversationId))
 }
 
 export async function deleteChunksByRefId(conversationId: string, refId: number): Promise<number> {

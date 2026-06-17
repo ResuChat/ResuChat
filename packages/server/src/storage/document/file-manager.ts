@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import { and, asc, desc, eq, isNotNull, isNull, max } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, isNull, max } from 'drizzle-orm'
 import { db, schema } from '../../lib/db'
 import { getGlobalDocRefCount } from './system-documents'
 import type { FileAddResult, DocumentRef, ConversationDocInfo } from '../../types/domain'
@@ -26,6 +26,128 @@ export interface AddFileToConversationOptions {
   sourceUserDocumentId?: number
 }
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+type PreparedConversationFile = {
+  fileHash: string
+  fileSize: number
+  filePath: string
+  isNewPhysicalFile: boolean
+}
+
+type InsertConversationFileRefParams = {
+  conversationId: string
+  preparedFile: PreparedConversationFile
+  originalName: string
+  fileType: string
+  role: 'original' | 'reference' | 'modified'
+  category?: string
+  contentSnapshot?: string
+  options?: AddFileToConversationOptions
+  now?: number
+}
+
+function deletePhysicalFileIfExists(filePath: string, logContext: Record<string, unknown>) {
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+  } catch (error) {
+    logger.error('Failed to delete document file', { ...logContext, filePath, error })
+  }
+}
+
+export function prepareConversationFile(
+  fileBuffer: Buffer,
+  fileType: string
+): PreparedConversationFile {
+  const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
+  const fileSize = fileBuffer.length
+  const fileName = `${fileHash}.${fileType}`
+  const filePath = path.join(UPLOADS_DIR, fileName)
+  let isNewPhysicalFile = false
+
+  if (!fs.existsSync(filePath)) {
+    try {
+      fs.writeFileSync(filePath, fileBuffer)
+      isNewPhysicalFile = true
+    } catch (err) {
+      throw new Error(`File write failed: ${err}`, { cause: err })
+    }
+  }
+
+  return { fileHash, fileSize, filePath, isNewPhysicalFile }
+}
+
+export async function insertConversationFileRef(
+  tx: DbTransaction,
+  params: InsertConversationFileRefParams
+): Promise<FileAddResult> {
+  const { conversationId, preparedFile, originalName, fileType, role, category, contentSnapshot } =
+    params
+  const now = params.now ?? Date.now()
+
+  const [existingGlobal] = await tx
+    .select({ id: schema.globalDocuments.id })
+    .from(schema.globalDocuments)
+    .where(eq(schema.globalDocuments.fileHash, preparedFile.fileHash))
+    .limit(1)
+
+  let globalDocId: number
+  let isNewFile = false
+
+  if (existingGlobal) {
+    globalDocId = existingGlobal.id
+  } else {
+    const [created] = await tx
+      .insert(schema.globalDocuments)
+      .values({
+        fileHash: preparedFile.fileHash,
+        filePath: preparedFile.filePath,
+        originalName,
+        fileType,
+        fileSize: preparedFile.fileSize,
+        createdAt: now
+      })
+      .returning({ id: schema.globalDocuments.id })
+    globalDocId = created.id
+    isNewFile = true
+  }
+
+  const [maxVersion] = await tx
+    .select({ value: max(schema.conversationDocumentRefs.version) })
+    .from(schema.conversationDocumentRefs)
+    .where(
+      and(
+        eq(schema.conversationDocumentRefs.conversationId, conversationId),
+        eq(schema.conversationDocumentRefs.role, role)
+      )
+    )
+  const newVersion = (maxVersion?.value ?? 0) + 1
+
+  const [ref] = await tx
+    .insert(schema.conversationDocumentRefs)
+    .values({
+      conversationId,
+      globalDocId,
+      role,
+      version: newVersion,
+      localName: params.options?.localName || originalName,
+      sourceUserDocumentId: params.options?.sourceUserDocumentId ?? null,
+      category: category || (role === 'reference' ? 'unknown' : 'resume'),
+      contentSnapshot: contentSnapshot || null,
+      createdAt: now
+    })
+    .returning({ id: schema.conversationDocumentRefs.id })
+
+  return {
+    globalDocId,
+    refId: ref.id,
+    filePath: preparedFile.filePath,
+    isNewFile,
+    version: newVersion,
+    category
+  }
+}
+
 export async function addFileToConversation(
   conversationId: string,
   fileBuffer: Buffer,
@@ -36,84 +158,30 @@ export async function addFileToConversation(
   contentSnapshot?: string,
   options?: AddFileToConversationOptions
 ): Promise<FileAddResult> {
-  const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
-  const fileSize = fileBuffer.length
-  const fileName = `${fileHash}.${fileType}`
-  const filePath = path.join(UPLOADS_DIR, fileName)
+  const preparedFile = prepareConversationFile(fileBuffer, fileType)
 
-  if (!fs.existsSync(filePath)) {
-    try {
-      fs.writeFileSync(filePath, fileBuffer)
-    } catch (err) {
-      throw new Error(`File write failed: ${err}`, { cause: err })
-    }
-  }
-
-  const now = Date.now()
-  const result = await db.transaction(async (tx) => {
-    const [existingGlobal] = await tx
-      .select({ id: schema.globalDocuments.id })
-      .from(schema.globalDocuments)
-      .where(eq(schema.globalDocuments.fileHash, fileHash))
-      .limit(1)
-
-    let globalDocId: number
-    let isNewFile = false
-
-    if (existingGlobal) {
-      globalDocId = existingGlobal.id
-    } else {
-      const [created] = await tx
-        .insert(schema.globalDocuments)
-        .values({
-          fileHash,
-          filePath,
-          originalName,
-          fileType,
-          fileSize,
-          createdAt: now
-        })
-        .returning({ id: schema.globalDocuments.id })
-      globalDocId = created.id
-      isNewFile = true
-    }
-
-    const [maxVersion] = await tx
-      .select({ value: max(schema.conversationDocumentRefs.version) })
-      .from(schema.conversationDocumentRefs)
-      .where(
-        and(
-          eq(schema.conversationDocumentRefs.conversationId, conversationId),
-          eq(schema.conversationDocumentRefs.role, role)
-        )
-      )
-    const newVersion = (maxVersion?.value ?? 0) + 1
-
-    const [ref] = await tx
-      .insert(schema.conversationDocumentRefs)
-      .values({
+  try {
+    return await db.transaction((tx) =>
+      insertConversationFileRef(tx, {
         conversationId,
-        globalDocId,
+        preparedFile,
+        originalName,
+        fileType,
         role,
-        version: newVersion,
-        localName: options?.localName || originalName,
-        sourceUserDocumentId: options?.sourceUserDocumentId ?? null,
-        category: category || (role === 'reference' ? 'unknown' : 'resume'),
-        contentSnapshot: contentSnapshot || null,
-        createdAt: now
+        category,
+        contentSnapshot,
+        options
       })
-      .returning({ id: schema.conversationDocumentRefs.id })
-
-    return { globalDocId, refId: ref.id, isNewFile, version: newVersion, category }
-  })
-
-  return {
-    globalDocId: result.globalDocId,
-    refId: result.refId,
-    filePath,
-    isNewFile: result.isNewFile,
-    version: result.version,
-    category: result.category
+    )
+  } catch (error) {
+    if (preparedFile.isNewPhysicalFile) {
+      deletePhysicalFileIfExists(preparedFile.filePath, {
+        operation: 'addFileToConversationRollback',
+        conversationId,
+        role
+      })
+    }
+    throw error
   }
 }
 
@@ -178,7 +246,26 @@ export async function cleanupOldVersions(
   role: string,
   maxVersions: number = 5
 ): Promise<void> {
-  const refs = await db
+  const filesToDelete = await db.transaction((tx) =>
+    cleanupOldVersionsInTransaction(tx, conversationId, role, maxVersions)
+  )
+
+  for (const filePath of filesToDelete) {
+    deletePhysicalFileIfExists(filePath, {
+      operation: 'cleanupOldVersionsAfterCommit',
+      conversationId,
+      role
+    })
+  }
+}
+
+export async function cleanupOldVersionsInTransaction(
+  tx: DbTransaction,
+  conversationId: string,
+  role: string,
+  maxVersions: number = 5
+): Promise<string[]> {
+  const refs = await tx
     .select({
       id: schema.conversationDocumentRefs.id,
       globalDocId: schema.conversationDocumentRefs.globalDocId
@@ -192,29 +279,44 @@ export async function cleanupOldVersions(
     )
     .orderBy(desc(schema.conversationDocumentRefs.version))
 
-  if (refs.length > maxVersions) {
-    const toRemove = refs.slice(maxVersions)
-    await db.transaction(async (tx) => {
-      for (const ref of toRemove) {
-        const [doc] = await tx
-          .select({ filePath: schema.globalDocuments.filePath })
-          .from(schema.globalDocuments)
-          .where(eq(schema.globalDocuments.id, ref.globalDocId))
-          .limit(1)
+  if (refs.length <= maxVersions) return []
 
-        await tx
-          .delete(schema.conversationDocumentRefs)
-          .where(eq(schema.conversationDocumentRefs.id, ref.id))
+  const toRemove = refs.slice(maxVersions)
+  const refIds = toRemove.map((ref) => ref.id)
+  const globalDocIds = Array.from(new Set(toRemove.map((ref) => ref.globalDocId)))
 
-        if (doc && (await getGlobalDocRefCount(ref.globalDocId, tx)) <= 0) {
-          if (fs.existsSync(doc.filePath)) fs.unlinkSync(doc.filePath)
-          await tx
-            .delete(schema.globalDocuments)
-            .where(eq(schema.globalDocuments.id, ref.globalDocId))
-        }
-      }
+  const docs = await tx
+    .select({ id: schema.globalDocuments.id, filePath: schema.globalDocuments.filePath })
+    .from(schema.globalDocuments)
+    .where(inArray(schema.globalDocuments.id, globalDocIds))
+
+  await tx
+    .delete(schema.conversationDocumentRefs)
+    .where(inArray(schema.conversationDocumentRefs.id, refIds))
+
+  const refCounts = await tx
+    .select({
+      globalDocId: schema.globalDocumentRefCounts.globalDocId,
+      referenceCount: schema.globalDocumentRefCounts.referenceCount
     })
+    .from(schema.globalDocumentRefCounts)
+    .where(inArray(schema.globalDocumentRefCounts.globalDocId, globalDocIds))
+
+  const remainingCountByGlobalDocId = new Map(
+    refCounts.map((row) => [row.globalDocId, row.referenceCount ?? 0])
+  )
+  const deletableGlobalDocIds = globalDocIds.filter(
+    (globalDocId) => (remainingCountByGlobalDocId.get(globalDocId) ?? 0) <= 0
+  )
+
+  if (deletableGlobalDocIds.length > 0) {
+    await tx
+      .delete(schema.globalDocuments)
+      .where(inArray(schema.globalDocuments.id, deletableGlobalDocIds))
   }
+
+  const deletableIdSet = new Set(deletableGlobalDocIds)
+  return docs.filter((doc) => deletableIdSet.has(doc.id)).map((doc) => doc.filePath)
 }
 
 export async function getChunksForConversation(
