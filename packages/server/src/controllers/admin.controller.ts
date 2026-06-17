@@ -23,7 +23,12 @@ export const uploadDoc: RequestHandler = async (req: Request, res: Response) => 
     return
   }
 
-  const result = await uploadSystemDocument(file.buffer, decodeFilename(file.originalname), groupId)
+  const result = await uploadSystemDocument(
+    file.buffer,
+    decodeFilename(file.originalname),
+    groupId,
+    file.mimetype
+  )
   res.status(202).json({ message: 'System document queued', ...result })
 }
 

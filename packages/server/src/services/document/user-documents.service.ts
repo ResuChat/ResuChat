@@ -50,9 +50,10 @@ export function createUserDocumentOwnerGuard(getId: OwnerIdGetter): AuthGuard {
 export async function uploadUserDocumentAndQueueParse(
   userId: string,
   fileBuffer: Buffer,
-  originalName: string
+  originalName: string,
+  mimetype?: string
 ): Promise<{ id: number; globalDocId: number }> {
-  assertSupportedUploadFile(originalName)
+  assertSupportedUploadFile(originalName, mimetype)
   const result = await uploadUserDocument(userId, fileBuffer, originalName)
   await docParseQueue.add('parse', {
     docId: result.id,
@@ -164,7 +165,11 @@ export async function parseUserDocument(
     )
   } catch (error) {
     logger.error('User document parse failed', { docId, originalName, error })
-    await updateUserDocumentParseResult(docId, { parseStatus: 'failed' }, true).catch(() => {})
+    await updateUserDocumentParseResult(docId, { parseStatus: 'failed' }, true).catch(
+      (updateError) => {
+        logger.error('Failed to mark user document parse as failed', { docId, updateError })
+      }
+    )
   } finally {
     const doc = await getUserDocFileInfo(docId)
     if (doc) {

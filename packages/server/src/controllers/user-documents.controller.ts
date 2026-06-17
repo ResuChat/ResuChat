@@ -23,7 +23,8 @@ export const uploadUserDoc: RequestHandler = async (req: Request, res: Response)
   const result = await uploadUserDocumentAndQueueParse(
     userId,
     file.buffer,
-    decodeFilename(file.originalname)
+    decodeFilename(file.originalname),
+    file.mimetype
   )
   res.json({ message: 'Uploaded successfully', id: result.id })
 }
