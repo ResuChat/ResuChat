@@ -85,15 +85,13 @@ import {
   updateSystemDocumentActive,
   updateSystemDocumentGroup,
   uploadSystemDocument
-} from '@/api'
+} from '@/api/admin'
 import { useSocket } from '@/composables/useWebSocket'
 import { getErrorMessage } from '@/lib/errors'
 import SystemGroupTree from '@/components/system-knowledge/SystemGroupTree.vue'
 import SystemDocumentTable from '@/components/system-knowledge/SystemDocumentTable.vue'
-import type { SystemDocumentGroup, SystemDocumentRecord } from '@/api'
+import type { SystemDocumentGroup, SystemDocumentRecord } from '@/types/api'
 import type { GroupNode } from '@/components/system-knowledge/SystemGroupTree.vue'
-
-type GroupNode = SystemDocumentGroup & { children: GroupNode[]; disabled_by_ancestor: boolean }
 
 const docs = ref<SystemDocumentRecord[]>([])
 const groups = ref<SystemDocumentGroup[]>([])
@@ -364,7 +362,7 @@ onMounted(() => {
   void refreshAll()
   const { on: wsOn } = useSocket()
   unsubSystemDocChanged = wsOn('system_doc_index_changed', () => {
-    void refreshAll()
+    void fetchDocs()
   })
   unsubSystemKnowledgeChanged = wsOn('system_knowledge_changed', () => {
     void refreshAll()

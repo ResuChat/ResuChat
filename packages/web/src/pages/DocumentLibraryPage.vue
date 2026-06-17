@@ -179,7 +179,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { Search, Delete, Download, Upload, Loading, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { api } from '@/api'
+import { api } from '@/api/client'
 import { formatRelative } from '@/lib/format'
 import { formatSize, fileTypeLabel } from '@/lib/file'
 import { getErrorMessage } from '@/lib/errors'
@@ -262,7 +262,10 @@ function parseTagText(row: DocRecord): string {
 
 // 只有简历类型失败或待解析的文档才能重新解析
 function canRetry(row: DocRecord): boolean {
-  return (row.parseStatus === 'failed' || row.parseStatus === 'pending') && (!row.contentCategory || row.contentCategory === 'resume')
+  return (
+    (row.parseStatus === 'failed' || row.parseStatus === 'pending') &&
+    (!row.contentCategory || row.contentCategory === 'resume')
+  )
 }
 
 async function fetchDocs() {

@@ -92,7 +92,7 @@ import { useIntervalFn } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
-import { login, register, sendEmailCode, saveAuth } from '@/api'
+import { login, register, sendEmailCode, saveAuth } from '@/api/auth'
 
 const router = useRouter()
 const isRegister = ref(false)

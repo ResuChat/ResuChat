@@ -41,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ReferenceDoc } from '@/api'
+import type { ReferenceDoc } from '@/types/api'
 
 defineProps<{ visible: boolean; files: ReferenceDoc[] }>()
 defineEmits<{ 'update:visible': [v: boolean]; remove: [id: number] }>()

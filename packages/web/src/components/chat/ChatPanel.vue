@@ -117,7 +117,7 @@
 import { ref, nextTick } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
 import type { Message, OptimizationItem, ModificationItem, MessageAttachment } from '@/types/chat'
-import type { ReferenceDoc } from '@/api'
+import type { ReferenceDoc } from '@/types/api'
 import type { QueuedRequest } from '@/types/chat'
 import OptimizationCard from '@/components/suggestion/OptimizationCard.vue'
 import ModificationReview from '@/components/suggestion/ModificationReview.vue'

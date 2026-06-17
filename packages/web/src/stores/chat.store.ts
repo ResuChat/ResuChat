@@ -1,12 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import {
-  getConversations,
-  type Conversation,
-  type DocumentRecord,
-  type ReferenceDoc,
-  type DocVersion
-} from '@/api'
+import { getConversations } from '@/api/conversation'
+import type { Conversation, DocumentRecord, ReferenceDoc, DocVersion } from '@/types/api'
 import type { Message } from '@/types/chat'
 import { loadConversationSnapshot } from '@/lib/conversation-loader'
 

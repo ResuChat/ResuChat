@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
-import { api } from '@/api'
+import { api } from '@/api/client'
 import type { DocItem } from '@/types/document'
 
 export function useDocSearch(filters?: { contentCategory?: string; parseStatus?: string }) {

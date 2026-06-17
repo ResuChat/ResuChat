@@ -1,5 +1,5 @@
 import { ref, nextTick, type Ref } from 'vue'
-import { getConversationMessages } from '@/api'
+import { getConversationMessages } from '@/api/conversation'
 import type { Message } from '@/types/chat'
 import { mapApiMessage } from '@/lib/editor-utils'
 

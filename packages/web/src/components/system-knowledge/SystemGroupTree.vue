@@ -22,7 +22,7 @@
       default-expand-all
       highlight-current
       empty-text="暂无分组"
-      @node-click="(data) => $emit('selectGroup', data)"
+      @node-click="(data: GroupNode) => $emit('selectGroup', data)"
     >
       <template #default="{ data }">
         <div
@@ -48,7 +48,9 @@
               placement="bottom-end"
               @click.stop
               @mousedown.stop
-              @command="(command) => $emit('groupCommand', String(command), data)"
+              @command="
+                (command: string | number | object) => $emit('groupCommand', String(command), data)
+              "
             >
               <el-button
                 text

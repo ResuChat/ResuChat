@@ -59,7 +59,7 @@ service.interceptors.response.use(
         refreshQueue.forEach((q) => q.reject(new Error('Refresh failed')))
         refreshQueue = []
         clearAuth()
-        import('@/router').then((mod) => mod.default.push('/'))
+        window.location.href = '/'
       } finally {
         isRefreshing = false
       }

@@ -11,6 +11,8 @@ import type {
   SystemDocumentGroup,
   SystemDocumentRecord,
   UserRole,
+  UserNotificationRecord,
+  UserNotificationsResponse,
   LoginResponse,
   RefreshResponse,
   RegisterResponse
@@ -29,6 +31,8 @@ export type {
   SystemDocumentGroup,
   SystemDocumentRecord,
   UserRole,
+  UserNotificationRecord,
+  UserNotificationsResponse,
   LoginResponse,
   RefreshResponse,
   RegisterResponse
@@ -53,4 +57,12 @@ export {
   updateSystemDocumentActive,
   uploadSystemDocument
 } from './admin'
-export { bindPhone, changePassword, getUserProfile, logout } from './user'
+export {
+  bindPhone,
+  changePassword,
+  getUserNotifications,
+  getUserProfile,
+  logout,
+  markAllUserNotificationsRead,
+  markUserNotificationRead
+} from './user'

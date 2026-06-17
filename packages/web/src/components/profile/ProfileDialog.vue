@@ -123,7 +123,8 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Camera } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user.store'
-import { api, changePassword } from '@/api'
+import { api } from '@/api/client'
+import { changePassword } from '@/api/user'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [v: boolean] }>()

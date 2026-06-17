@@ -65,9 +65,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, Delete } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
-import { getConversations, deleteConversation } from '@/api'
+import { getConversations, deleteConversation } from '@/api/conversation'
 import { formatTime } from '@/lib/format'
-import type { Conversation } from '@/api'
+import type { Conversation } from '@/types/api'
 
 const router = useRouter()
 const searchQuery = ref('')
