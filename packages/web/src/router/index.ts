@@ -1,13 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from '@/components/sidebar/AppLayout.vue'
 import LoginPage from '@/pages/LoginPage.vue'
-import NewChatPage from '@/pages/NewChatPage.vue'
-import SearchConversationsPage from '@/pages/SearchConversationsPage.vue'
-import EditorPage from '@/pages/EditorPage.vue'
-import DocumentLibraryPage from '@/pages/DocumentLibraryPage.vue'
-import SystemKnowledgePage from '@/pages/SystemKnowledgePage.vue'
 import { isAuthenticated } from '@/lib/auth'
 import { useUserStore } from '@/stores/user.store'
+
+const NewChatPage = () => import('@/pages/NewChatPage.vue')
+const SearchConversationsPage = () => import('@/pages/SearchConversationsPage.vue')
+const EditorPage = () => import('@/pages/EditorPage.vue')
+const DocumentLibraryPage = () => import('@/pages/DocumentLibraryPage.vue')
+const SystemKnowledgePage = () => import('@/pages/SystemKnowledgePage.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -30,7 +31,7 @@ const router = createRouter({
           meta: { requiresAdmin: true }
         }
       ]
-    },
+    }
   ]
 })
 

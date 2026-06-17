@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
+    "build:analyze": "vue-tsc --noEmit && vite build --mode analyze",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
@@ -25,6 +26,7 @@
     "jsdom": "^27.0.1",
     "postcss": "^8.5.10",
     "postcss-less": "^6.0.0",
+    "rollup-plugin-visualizer": "^7.0.1",
     "stylelint": "^17.9.0",
     "stylelint-config-recommended-less": "^4.2.1",
     "stylelint-config-standard": "^40.0.0",
