@@ -54,6 +54,25 @@ export const loginHistory = pgTable(
   (table) => [index('login_history_user_id_idx').on(table.userId)]
 )
 
+export const userNotifications = pgTable(
+  'user_notifications',
+  {
+    id: serial('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    title: text('title').notNull(),
+    content: text('content').notNull(),
+    readAt: millis('read_at'),
+    createdAt: millis('created_at').notNull()
+  },
+  (table) => [
+    index('user_notifications_user_id_created_at_idx').on(table.userId, table.createdAt.desc()),
+    index('user_notifications_user_id_read_at_idx').on(table.userId, table.readAt)
+  ]
+)
+
 export const conversations = pgTable(
   'conversations',
   {
@@ -96,6 +115,9 @@ export const messages = pgTable(
   (table) => [
     index('messages_conversation_id_idx').on(table.conversationId),
     index('messages_conversation_id_created_at_idx').on(table.conversationId, table.createdAt),
+    index('messages_conversation_unsummarized_created_at_idx')
+      .on(table.conversationId, table.createdAt)
+      .where(sql`${table.summarized} = false`),
     index('messages_client_id_idx').on(table.clientId)
   ]
 )
@@ -161,7 +183,8 @@ export const userDocuments = pgTable(
   },
   (table) => [
     uniqueIndex('user_documents_user_id_global_doc_id_key').on(table.userId, table.globalDocId),
-    index('user_documents_user_id_idx').on(table.userId)
+    index('user_documents_user_id_idx').on(table.userId),
+    index('user_documents_global_doc_id_idx').on(table.globalDocId)
   ]
 )
 
@@ -190,7 +213,15 @@ export const conversationDocumentRefs = pgTable(
   (table) => [
     index('conversation_document_refs_conversation_id_idx').on(table.conversationId),
     index('conversation_document_refs_global_doc_id_idx').on(table.globalDocId),
-    index('conversation_document_refs_source_user_document_id_idx').on(table.sourceUserDocumentId)
+    index('conversation_document_refs_source_user_document_id_idx').on(table.sourceUserDocumentId),
+    index('conversation_document_refs_conversation_role_version_idx').on(
+      table.conversationId,
+      table.role,
+      table.version.desc()
+    ),
+    index('conversation_document_refs_conversation_snapshot_created_at_idx')
+      .on(table.conversationId, table.createdAt.desc())
+      .where(sql`${table.contentSnapshot} IS NOT NULL`)
   ]
 )
 
@@ -228,6 +259,7 @@ export const systemDocuments = pgTable(
   },
   (table) => [
     index('system_documents_group_id_idx').on(table.groupId),
+    index('system_documents_group_id_active_idx').on(table.groupId, table.active),
     index('system_documents_index_status_idx').on(table.indexStatus)
   ]
 )
