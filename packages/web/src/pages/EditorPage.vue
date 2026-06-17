@@ -258,6 +258,19 @@ function handleCancelAllPending() {
   if (drops > 0) supplementCount.value = Math.max(0, supplementCount.value - drops)
 }
 
+function scrollToBottomOnReady() {
+  if (chatPanelRef.value) {
+    chatPanelRef.value.scrollToBottom()
+    return
+  }
+  const stop = watch(chatPanelRef, (val) => {
+    if (val) {
+      val.scrollToBottom()
+      stop()
+    }
+  })
+}
+
 function onChatScroll(payload: { scrollTop: number; scrollHeight: number; clientHeight: number }) {
   const isNearBottom = payload.scrollHeight - payload.scrollTop - payload.clientHeight < 80
   autoScroll.value = isNearBottom
@@ -456,7 +469,7 @@ async function setupConversation(
 
     loading.value = false
     await nextTick()
-    chatPanelRef.value?.scrollToBottom()
+    scrollToBottomOnReady()
     setTimeout(() => {
       scrollReady.value = true
     }, 300)
