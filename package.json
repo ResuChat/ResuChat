@@ -16,7 +16,7 @@
     "dev:web": "pnpm --filter @resuchat/web dev",
     "build:shared": "pnpm --filter @resuchat/shared build",
     "build:server": "pnpm run build:shared && pnpm --filter @resuchat/server build",
-    "build:web": "pnpm run build:shared && pnpm --filter @resuchat/web build",
+    "build:web": "pnpm --filter @resuchat/web build",
     "build": "pnpm run build:shared && pnpm --filter @resuchat/server build && pnpm --filter @resuchat/web build",
     "lint": "eslint .",
     "lint:packages": "pnpm -r lint",

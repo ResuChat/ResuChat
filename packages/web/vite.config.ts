@@ -37,7 +37,8 @@ export default defineConfig(({ mode }) => {
     plugins,
     resolve: {
       alias: {
-        '@': fileURLToPath(new URL('./src', import.meta.url))
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+        '@resuchat/shared': fileURLToPath(new URL('../shared/src/index.ts', import.meta.url))
       }
     },
     define: { global: 'globalThis' },
