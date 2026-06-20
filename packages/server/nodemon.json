@@ -1,5 +1,5 @@
 {
-  "watch": ["src"],
+  "watch": ["src", "../shared/src"],
   "ext": "ts,js,json,env",
   "ignore": [
     "src/**/*.spec.ts",
@@ -10,7 +10,7 @@
     "uploads/**/*",
     "docs/**/*"
   ],
-  "exec": "tsx src/index.ts",
+  "exec": "vite-node --config vite.config.ts src/index.ts",
   "env": {
     "NODE_ENV": "development",
     "START_WORKER_IN_SERVER": "true"

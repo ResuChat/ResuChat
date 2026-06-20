@@ -11,7 +11,7 @@ async function main() {
 
   if (!identifier || !role || !allowedRoles.has(role)) {
     console.log(
-      'Usage: pnpm --filter @resuchat/server exec tsx scripts/set-user-role.ts <id|email|phone> <normal|premium|admin>'
+      'Usage: pnpm --filter @resuchat/server exec vite-node --config vite.config.ts scripts/set-user-role.ts <id|email|phone> <normal|premium|admin>'
     )
     process.exitCode = 1
     return

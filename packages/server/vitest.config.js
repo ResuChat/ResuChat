@@ -1,5 +1,6 @@
-/** @type {import('vitest/config').defineConfig} */
-module.exports = {
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
     exclude: ['node_modules', 'dist'],
@@ -9,4 +10,4 @@ module.exports = {
       USE_REDIS: 'false'
     }
   }
-}
+})

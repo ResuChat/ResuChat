@@ -1,4 +1,6 @@
 import { Worker, type Job } from 'bullmq'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import {
   CONVERSATION_TRASH_PURGE_INTERVAL_MS,
   LOGIN_HISTORY_PURGE_INTERVAL_MS,
@@ -253,7 +255,11 @@ async function gracefulShutdown(signal: string) {
   }
 }
 
-if (require.main === module) {
+const isMainModule =
+  typeof process.argv[1] === 'string' &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+
+if (isMainModule) {
   startWorkers().catch((error) => {
     logger.error('Queue worker startup failed', { error })
     process.exit(1)

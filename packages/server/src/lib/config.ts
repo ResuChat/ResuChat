@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
 /** 必需的环境变量校验 */
 function requireEnv(key: string): string {
@@ -10,7 +11,7 @@ function requireEnv(key: string): string {
 
 /** 集中配置 — 所有可配置常量从 .env 读取，带默认值 */
 
-const SERVER_ROOT = path.resolve(__dirname, '..', '..')
+const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 // 安全/部署
 export const PORT = parseInt(process.env.PORT || '3000')

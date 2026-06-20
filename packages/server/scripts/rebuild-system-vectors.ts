@@ -56,7 +56,9 @@ async function closeResources(): Promise<void> {
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   if (!hasOnlyKnownArgs(args)) {
-    throw new Error('Usage: tsx scripts/rebuild-system-vectors.ts [--check] [--force]')
+    throw new Error(
+      'Usage: vite-node --config vite.config.ts scripts/rebuild-system-vectors.ts [--check] [--force]'
+    )
   }
 
   const checkOnly = args.includes('--check')
