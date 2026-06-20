@@ -95,6 +95,9 @@ Docker 配置集中在 [docker](docker) 目录：
 docker compose -f docker/compose.yml up --build
 ```
 
+该配置会启动前端、后端、worker、PostgreSQL 和 Redis。前端访问地址为
+`http://localhost:5173`，后端 API 仍暴露在 `http://localhost:3000`。
+
 ## 环境变量
 
 至少需要：
