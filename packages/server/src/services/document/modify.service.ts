@@ -8,7 +8,7 @@ import {
   sectionsToContentArray,
   generateResumePDF
 } from '../../lib/pdf/pdfmaker'
-import { replaceText } from '../../lib/pdf/markdown'
+import { tryReplaceText } from '../../lib/pdf/markdown'
 import { DocumentLoader } from '../../lib/document/loader'
 import {
   cleanupOldVersionsInTransaction,
@@ -103,7 +103,10 @@ export function createApplyStream(params: ApplyModificationParams) {
         newContentLength: newContent.length
       })
 
-      const newFullText = replaceText(fullText, current.trim(), newContent)
+      const newFullText = tryReplaceText(fullText, current.trim(), newContent)
+      if (!newFullText) {
+        throw new ValidationError('未能在当前简历中定位到要修改的原文，请刷新后重试')
+      }
       logger.debug('Apply modification text replaced', {
         conversationId,
         field,

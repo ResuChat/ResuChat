@@ -142,7 +142,11 @@ function replaceByFlatOffset(
   return head + newContent + tail
 }
 
-export function replaceText(fullText: string, current: string, newContent: string): string {
+export function tryReplaceText(
+  fullText: string,
+  current: string,
+  newContent: string
+): string | null {
   const lines = fullText.split('\n')
   const flatFull = fullText.replace(/\n/g, ' ')
   const normFull = normalize(fullText)
@@ -177,14 +181,14 @@ export function replaceText(fullText: string, current: string, newContent: strin
     logger.warn('replaceText current head not found, returning original', {
       currentPreview: current.slice(0, 80)
     })
-    return fullText
+    return null
   }
   const tailIdx = normFull.indexOf(tail, headIdx + head.length)
   if (tailIdx === -1) {
     logger.warn('replaceText current tail not found, returning original', {
       currentPreview: current.slice(0, 80)
     })
-    return fullText
+    return null
   }
 
   const matchLen = tailIdx + tail.length - headIdx
@@ -194,5 +198,9 @@ export function replaceText(fullText: string, current: string, newContent: strin
   logger.warn('replaceText all strategies failed, returning original', {
     currentPreview: current.slice(0, 80)
   })
-  return fullText
+  return null
+}
+
+export function replaceText(fullText: string, current: string, newContent: string): string {
+  return tryReplaceText(fullText, current, newContent) ?? fullText
 }
