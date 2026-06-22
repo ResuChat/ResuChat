@@ -49,11 +49,17 @@ export function createSearchStreamRuntime(): SearchStreamRuntime {
 export class SearchStreamPersistence {
   readonly runtime: SearchStreamRuntime
   readonly assistantMessageId: string | null
+  private readonly conversationId: string
   private content = ''
   private reasoning = ''
 
-  private constructor(params: { runtime: SearchStreamRuntime; assistantMessageId: string | null }) {
+  private constructor(params: {
+    runtime: SearchStreamRuntime
+    conversationId: string
+    assistantMessageId: string | null
+  }) {
     this.runtime = params.runtime
+    this.conversationId = params.conversationId
     this.assistantMessageId = params.assistantMessageId
   }
 
@@ -63,7 +69,7 @@ export class SearchStreamPersistence {
     displayText?: string
     attachments?: MessageAttachment[]
     userMsgId?: string
-    assistantMsgId?: string
+    assistantMsgId: string
   }) {
     const runtime = createSearchStreamRuntime()
     const assistantMessageId = await persistSearchMessages({
@@ -75,7 +81,11 @@ export class SearchStreamPersistence {
       assistantMsgId: params.assistantMsgId
     })
 
-    return new SearchStreamPersistence({ runtime, assistantMessageId })
+    return new SearchStreamPersistence({
+      runtime,
+      conversationId: params.conversationId,
+      assistantMessageId
+    })
   }
 
   get abortSignal() {
@@ -128,12 +138,9 @@ export class SearchStreamPersistence {
   async finalize() {
     if (!this.assistantMessageId) return
 
-    await updateMessageByClientId(
-      this.assistantMessageId,
-      this.content,
-      this.reasoning,
-      this.currentState()
-    )
+    const state = this.currentState()
+    await updateMessageByClientId(this.assistantMessageId, this.content, this.reasoning, state)
+    if (state === 'completed') triggerAutoSummary(this.conversationId)
   }
 
   private currentState(): SearchStreamState {
@@ -172,7 +179,7 @@ export async function persistSearchMessages(params: {
   displayText?: string
   attachments?: MessageAttachment[]
   userMsgId?: string
-  assistantMsgId?: string
+  assistantMsgId: string
 }) {
   const { conversationId, query, displayText, attachments, userMsgId, assistantMsgId } = params
 
@@ -197,15 +204,12 @@ export async function persistSearchMessages(params: {
       displayText,
       attachments
     )
-    triggerAutoSummary(conversationId)
   }
 
-  if (assistantMsgId) {
-    await insertMessageWithClientId(conversationId, 'assistant', '', assistantMsgId, 'streaming')
-  }
+  await insertMessageWithClientId(conversationId, 'assistant', '', assistantMsgId, 'streaming')
 
   await touchConversation(conversationId)
-  return assistantMsgId ?? null
+  return assistantMsgId
 }
 
 export async function resetStuckStreamingMessages(): Promise<number> {

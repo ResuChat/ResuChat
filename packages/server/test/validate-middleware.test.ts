@@ -79,6 +79,7 @@ describe('SearchRequest', () => {
     const result = SearchRequest.safeParse({
       query: '参考文档优化',
       conversationId: 'conv_123',
+      assistantMsgId: 'assistant_123',
       docIds: [1]
     })
 

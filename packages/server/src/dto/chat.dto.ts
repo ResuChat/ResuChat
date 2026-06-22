@@ -16,7 +16,7 @@ export const SearchRequest = z.object({
   k: z.coerce.number().int().optional(),
   conversationId: z.string().trim().min(1, 'conversationId 不能为空'),
   userMsgId: z.string().optional(),
-  assistantMsgId: z.string().optional(),
+  assistantMsgId: z.string().trim().min(1, 'assistantMsgId 不能为空'),
   docIds: jsonArrayOfNumbers.optional()
 })
 

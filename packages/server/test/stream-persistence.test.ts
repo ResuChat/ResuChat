@@ -1,5 +1,12 @@
 import { EventEmitter } from 'events'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const triggerAutoSummary = vi.hoisted(() => vi.fn())
+
+vi.mock('../src/services/chat/summary.service', () => ({
+  triggerAutoSummary
+}))
+
 import { SearchStreamPersistence } from '../src/services/chat/stream-persistence.service'
 import {
   getMessageStatusByClientId,
@@ -12,6 +19,10 @@ import { getApiTestState, registerApiTestLifecycle } from './helpers/api-test-he
 registerApiTestLifecycle()
 
 describe('Streaming message persistence', () => {
+  beforeEach(() => {
+    triggerAutoSummary.mockClear()
+  })
+
   it('should preserve buffered content when marking interrupted', async () => {
     const convId = `conv_interrupt_${Date.now()}`
     await createConversation(convId, getApiTestState().testUserId)
@@ -44,6 +55,7 @@ describe('Streaming message persistence', () => {
     expect(row?.status).toBe('completed')
     expect(row?.content).toBe('完成内容')
     expect(row?.reasoning).toBe('完成推理')
+    expect(triggerAutoSummary).toHaveBeenCalledWith(convId)
   })
 
   it('should finalize streaming message as interrupted after abort', async () => {
@@ -65,6 +77,7 @@ describe('Streaming message persistence', () => {
     expect(row?.status).toBe('interrupted')
     expect(row?.content).toBe('中断内容')
     expect(row?.reasoning).toBe('中断推理')
+    expect(triggerAutoSummary).not.toHaveBeenCalled()
   })
 
   it('should persist partial content as interrupted on response close', async () => {

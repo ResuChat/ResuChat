@@ -77,7 +77,7 @@ export async function consumeSearchSseStream(params: {
 
 export function executeSearchStream(params: {
   res: Response
-  assistantMsgId?: string
+  assistantMsgId: string
   tools: ToolSet
   prompt: string
   streamPersistence: SearchStreamPersistence
@@ -99,7 +99,7 @@ export function executeSearchStream(params: {
   })
 
   result.pipeUIMessageStreamToResponse(res, {
-    ...(assistantMsgId ? { generateMessageId: () => assistantMsgId } : {}),
+    generateMessageId: () => assistantMsgId,
     consumeSseStream: async ({ stream }) => {
       try {
         await consumeSearchSseStream({ stream, streamPersistence })

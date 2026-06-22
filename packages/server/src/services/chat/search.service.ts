@@ -17,7 +17,7 @@ export async function performSearch(
     k?: number
     conversationId: string
     userMsgId?: string
-    assistantMsgId?: string
+    assistantMsgId: string
   },
   res: Response,
   req: Request,

@@ -44,7 +44,7 @@ describe('RAG API', () => {
     const { testConversationId } = getApiTestState()
     const { status } = await request({
       path: '/chat/search',
-      body: { query: 'test', conversationId: testConversationId }
+      body: { query: 'test', conversationId: testConversationId, assistantMsgId: 'assistant-auth' }
     })
     expect(status).toBe(401)
   })
@@ -64,11 +64,23 @@ describe('RAG API', () => {
     const { status, body } = await request({
       path: '/chat/search',
       token: accessToken,
-      body: { query: 'test' }
+      body: { query: 'test', assistantMsgId: 'assistant-missing-conversation' }
     })
 
     expect(status).toBe(400)
     expect(body).toContain('conversationId')
+  })
+
+  it('should require assistantMsgId for search', async () => {
+    const { accessToken, testConversationId } = getApiTestState()
+    const { status, body } = await request({
+      path: '/chat/search',
+      token: accessToken,
+      body: { query: 'test', conversationId: testConversationId }
+    })
+
+    expect(status).toBe(400)
+    expect(body).toContain('assistantMsgId')
   })
 
   it('should reject search for conversations owned by another user', async () => {
@@ -80,7 +92,11 @@ describe('RAG API', () => {
     const { status } = await request({
       path: '/chat/search',
       token: accessToken,
-      body: { query: 'test', conversationId: otherConversationId }
+      body: {
+        query: 'test',
+        conversationId: otherConversationId,
+        assistantMsgId: 'assistant-other-owner'
+      }
     })
 
     expect(status).toBe(403)
@@ -149,7 +165,7 @@ describe('Conversation Trash API', () => {
     const searchResult = await request({
       path: '/chat/search',
       token: accessToken,
-      body: { query: 'test', conversationId }
+      body: { query: 'test', conversationId, assistantMsgId: 'assistant-soft-deleted' }
     })
     expect(searchResult.status).toBe(403)
 
