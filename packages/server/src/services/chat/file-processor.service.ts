@@ -130,13 +130,7 @@ export async function processFileAsReference(opts: {
 
   // 同步到用户文档库（仅上传路径需要）
   if (syncToUserLibrary && uid) {
-    syncChatReferenceToUserLibrary(
-      uid,
-      conversationId,
-      result.globalDocId,
-      referenceName,
-      file.buffer
-    )
+    syncChatReferenceToUserLibrary(uid, conversationId, result.globalDocId, referenceName)
   }
 
   return {

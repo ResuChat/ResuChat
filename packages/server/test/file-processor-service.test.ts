@@ -110,13 +110,7 @@ describe('processFileAsReference', () => {
       ]),
       11
     )
-    expect(syncChatReferenceToUserLibrary).toHaveBeenCalledWith(
-      'user-1',
-      'conv-1',
-      22,
-      'ref.pdf',
-      expect.any(Buffer)
-    )
+    expect(syncChatReferenceToUserLibrary).toHaveBeenCalledWith('user-1', 'conv-1', 22, 'ref.pdf')
     expect(result?.refId).toBe(11)
   })
 

@@ -1,3 +1,6 @@
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const addToUserLibrary = vi.fn()
@@ -101,5 +104,74 @@ describe('user document upload', () => {
       filePath: 'uploads/documents/resume.docx',
       originalName: 'resume.docx'
     })
+  })
+
+  it('queues retry parsing instead of parsing in the api process', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resuchat-user-doc-'))
+    const tempFile = path.join(tempDir, 'resume.pdf')
+    fs.writeFileSync(tempFile, 'pdf')
+    getUserDocFileInfo.mockResolvedValue({
+      id: 21,
+      userId: 'user-1',
+      globalDocId: 31,
+      localName: 'resume',
+      originalName: 'resume.pdf',
+      fileType: 'pdf',
+      filePath: tempFile,
+      parseStatus: 'failed',
+      contentCategory: null,
+      markdownContent: null
+    })
+    docParseQueueAdd.mockResolvedValue({ id: 'retry-job-1' })
+
+    const { retryParseUserDocument } =
+      await import('../src/services/document/user-documents.service')
+
+    await retryParseUserDocument(21)
+
+    expect(markUserDocumentParsing).toHaveBeenCalledWith(21)
+    expect(docParseQueueAdd).toHaveBeenCalledWith('parse', {
+      docId: 21,
+      filePath: tempFile,
+      originalName: 'resume.pdf'
+    })
+    expect(updateUserDocumentParseResult).not.toHaveBeenCalled()
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  })
+
+  it('queues synced chat references for user library parsing', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resuchat-user-doc-sync-'))
+    const tempFile = path.join(tempDir, 'reference.pdf')
+    fs.writeFileSync(tempFile, 'pdf')
+    addToUserLibrary.mockResolvedValue({ id: 45 })
+    getUserDocFileInfo.mockResolvedValue({
+      id: 45,
+      userId: 'user-1',
+      globalDocId: 55,
+      localName: 'reference',
+      originalName: 'reference.pdf',
+      fileType: 'pdf',
+      filePath: tempFile,
+      parseStatus: 'pending',
+      contentCategory: null,
+      markdownContent: null
+    })
+    docParseQueueAdd.mockResolvedValue({ id: 'sync-job-1' })
+
+    const { syncChatReferenceToUserLibrary } =
+      await import('../src/services/document/user-documents.service')
+
+    syncChatReferenceToUserLibrary('user-1', 'conv-1', 55, 'reference.pdf')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(addToUserLibrary).toHaveBeenCalledWith('user-1', 55, 'reference.pdf', 'conversation')
+    expect(markUserDocumentParsing).toHaveBeenCalledWith(45)
+    expect(docParseQueueAdd).toHaveBeenCalledWith('parse', {
+      docId: 45,
+      filePath: tempFile,
+      originalName: 'reference.pdf'
+    })
+    expect(updateUserDocumentParseResult).not.toHaveBeenCalled()
+    fs.rmSync(tempDir, { recursive: true, force: true })
   })
 })

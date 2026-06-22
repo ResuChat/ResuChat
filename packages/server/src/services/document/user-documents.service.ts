@@ -63,6 +63,21 @@ export async function uploadUserDocumentAndQueueParse(
   return { id: result.id, globalDocId: result.globalDocId }
 }
 
+async function enqueueUserDocumentParse(id: number): Promise<void> {
+  const doc = await getUserDocFileInfo(id)
+  if (!doc || !fs.existsSync(doc.filePath)) {
+    throw new NotFoundError('File not found')
+  }
+
+  assertSupportedUploadFile(doc.originalName)
+  await markUserDocumentParsing(id)
+  await docParseQueue.add('parse', {
+    docId: id,
+    filePath: doc.filePath,
+    originalName: doc.originalName
+  })
+}
+
 export async function listUserDocumentsForUser(
   userId: string,
   options: {
@@ -191,16 +206,7 @@ export async function parseUserDocument(
 }
 
 export async function retryParseUserDocument(id: number): Promise<void> {
-  const doc = await getUserDocFileInfo(id)
-  if (!doc || !fs.existsSync(doc.filePath)) {
-    throw new NotFoundError('File not found')
-  }
-
-  assertSupportedUploadFile(doc.originalName)
-  await markUserDocumentParsing(id)
-  parseUserDocumentFromFile(id, doc.filePath, doc.originalName).catch((error) =>
-    logger.error('User document retry parse failed', { docId: id, error })
-  )
+  await enqueueUserDocumentParse(id)
 }
 
 export async function cancelParseUserDocument(id: number): Promise<void> {
@@ -263,22 +269,10 @@ export function syncChatReferenceToUserLibrary(
   userId: string,
   conversationId: string,
   globalDocId: number,
-  localName: string,
-  fileBuffer: Buffer
+  localName: string
 ): void {
   addToUserLibrary(userId, globalDocId, localName, 'conversation')
-    .then((doc) =>
-      markUserDocumentParsing(doc.id).then(() =>
-        parseUserDocument(doc.id, fileBuffer, localName).catch((error) =>
-          logger.error('Synced chat reference document parse failed', {
-            userId,
-            conversationId,
-            docId: doc.id,
-            error
-          })
-        )
-      )
-    )
+    .then((doc) => enqueueUserDocumentParse(doc.id))
     .catch((error) =>
       logger.error('Failed to sync chat reference document to user library', {
         userId,
