@@ -190,131 +190,150 @@ export async function startConversation(
   report(0, '正在准备...')
 
   const initialPrompt = query && query.trim() ? query.trim() : ''
+  let conversationCreated = false
   if (userId) {
     await createConversation(conversationId, userId, initialPrompt)
+    conversationCreated = true
   }
 
   let firstMarkdownText = ''
   let firstOriginalRefId = 0
 
-  if (files && files.length > 0) {
-    const decodedFiles = files.map((file) => ({
-      ...file,
-      originalname: decodeFilename(file.originalname)
-    }))
-
-    let firstFile = true
-    for (const file of decodedFiles) {
-      assertSupportedUploadFile(file.originalname, preParsedMarkdown ? undefined : file.mimetype)
-      const fileType = inferStoredFileType(file.originalname)
-      if (fileType === 'doc' && !preParsedMarkdown) {
-        throw new ValidationError(
-          '暂不支持旧版 .doc 文件，请转换为 .docx、PDF、TXT 或 Markdown 后再上传'
-        )
-      }
-
-      const result = await addFileToConversation(
-        conversationId,
-        file.buffer,
-        file.originalname,
-        fileType,
-        'original',
-        undefined,
-        undefined,
-        {
-          localName: preParsedLocalName,
-          sourceUserDocumentId: docId
-        }
-      )
-      let markdownText: string
-
-      if (preParsedMarkdown) {
-        // 来自文档库：跳过 LLM，直接复用已有 markdown
-        markdownText = preParsedMarkdown
-      } else {
-        // 来自上传文件：完整解析流程
-        const fileContent = await parseFileContent(file)
-
-        const classification = await classifyReferenceFile(fileContent)
-        if (classification !== 'resume') {
-          throw new ValidationError('上传文件不是简历，请上传简历文件')
-        }
-
-        report(30, '正在解析为结构化格式...')
-
-        const markdownResponse = await getFastModel().invoke(
-          [
-            {
-              role: 'user',
-              content: buildResumeMarkdownPrompt(fileContent)
-            }
-          ],
-          { signal: AbortSignal.timeout(LLM_MARKDOWN_TIMEOUT) }
-        )
-        markdownText =
-          typeof markdownResponse.content === 'string' ? markdownResponse.content : fileContent
-        const mdMatch = markdownText.match(/```(?:markdown)?\s*([\s\S]*?)```/)
-        if (mdMatch) {
-          markdownText = mdMatch[1].trim()
-        } else {
-          const headingStart = markdownText.search(/^#{1,3}\s/m)
-          if (headingStart > 0) markdownText = markdownText.slice(headingStart)
-        }
-      }
-
-      report(80, '正在构建索引...')
-
-      const fileRAG = new DocumentLoader()
-      await fileRAG.loadDocumentsFromText([
-        { text: markdownText, metadata: { source: file.originalname, file_type: 'resume' } }
-      ])
-
-      const typedChunks = fileRAG.chunks.map((chunk) => ({
-        pageContent: chunk.pageContent,
-        metadata: chunk.metadata,
-        role: 'original' as const,
-        category: 'resume'
+  try {
+    if (files && files.length > 0) {
+      const decodedFiles = files.map((file) => ({
+        ...file,
+        originalname: decodeFilename(file.originalname)
       }))
 
-      // 同步解析结果到用户文档库（每个文件都同步）
-      if (userId) {
-        addToUserLibrary(
-          userId,
-          result.globalDocId,
-          file.originalname,
-          'conversation',
-          markdownText,
-          'resume'
-        ).catch((error) =>
-          logger.error('Failed to sync conversation parse result to user library', {
-            userId,
-            conversationId,
-            globalDocId: result.globalDocId,
-            error
-          })
-        )
-      }
+      let firstFile = true
+      for (const file of decodedFiles) {
+        assertSupportedUploadFile(file.originalname, preParsedMarkdown ? undefined : file.mimetype)
+        const fileType = inferStoredFileType(file.originalname)
+        if (fileType === 'doc' && !preParsedMarkdown) {
+          throw new ValidationError(
+            '暂不支持旧版 .doc 文件，请转换为 .docx、PDF、TXT 或 Markdown 后再上传'
+          )
+        }
 
-      if (firstFile) {
-        firstMarkdownText = markdownText
-        firstOriginalRefId = result.refId
-        updateDocumentRefSnapshot(result.refId, markdownText)
-        await setConversationChunksWithTypes(conversationId, typedChunks, result.refId)
-        firstFile = false
-      } else {
-        await appendConversationChunks(conversationId, typedChunks, result.refId)
+        const result = await addFileToConversation(
+          conversationId,
+          file.buffer,
+          file.originalname,
+          fileType,
+          'original',
+          undefined,
+          undefined,
+          {
+            localName: preParsedLocalName,
+            sourceUserDocumentId: docId
+          }
+        )
+        let markdownText: string
+
+        if (preParsedMarkdown) {
+          // 来自文档库：跳过 LLM，直接复用已有 markdown
+          markdownText = preParsedMarkdown
+        } else {
+          // 来自上传文件：完整解析流程
+          const fileContent = await parseFileContent(file)
+
+          const classification = await classifyReferenceFile(fileContent)
+          if (classification !== 'resume') {
+            throw new ValidationError('上传文件不是简历，请上传简历文件')
+          }
+
+          report(30, '正在解析为结构化格式...')
+
+          const markdownResponse = await getFastModel().invoke(
+            [
+              {
+                role: 'user',
+                content: buildResumeMarkdownPrompt(fileContent)
+              }
+            ],
+            { signal: AbortSignal.timeout(LLM_MARKDOWN_TIMEOUT) }
+          )
+          markdownText =
+            typeof markdownResponse.content === 'string' ? markdownResponse.content : fileContent
+          const mdMatch = markdownText.match(/```(?:markdown)?\s*([\s\S]*?)```/)
+          if (mdMatch) {
+            markdownText = mdMatch[1].trim()
+          } else {
+            const headingStart = markdownText.search(/^#{1,3}\s/m)
+            if (headingStart > 0) markdownText = markdownText.slice(headingStart)
+          }
+        }
+
+        report(80, '正在构建索引...')
+
+        const fileRAG = new DocumentLoader()
+        await fileRAG.loadDocumentsFromText([
+          { text: markdownText, metadata: { source: file.originalname, file_type: 'resume' } }
+        ])
+
+        const typedChunks = fileRAG.chunks.map((chunk) => ({
+          pageContent: chunk.pageContent,
+          metadata: chunk.metadata,
+          role: 'original' as const,
+          category: 'resume'
+        }))
+
+        // 同步解析结果到用户文档库（每个文件都同步）
+        if (userId) {
+          addToUserLibrary(
+            userId,
+            result.globalDocId,
+            file.originalname,
+            'conversation',
+            markdownText,
+            'resume'
+          ).catch((error) =>
+            logger.error('Failed to sync conversation parse result to user library', {
+              userId,
+              conversationId,
+              globalDocId: result.globalDocId,
+              error
+            })
+          )
+        }
+
+        if (firstFile) {
+          firstMarkdownText = markdownText
+          firstOriginalRefId = result.refId
+          updateDocumentRefSnapshot(result.refId, markdownText)
+          await setConversationChunksWithTypes(conversationId, typedChunks, result.refId)
+          firstFile = false
+        } else {
+          await appendConversationChunks(conversationId, typedChunks, result.refId)
+        }
+      }
+      await cleanupOldVersions(conversationId, 'original', MAX_FILE_VERSIONS)
+    }
+
+    report(100, '完成')
+    setTimeout(() => uploadProgress.delete(conversationId), UPLOAD_PROGRESS_TTL)
+
+    return {
+      conversationId,
+      initialPrompt,
+      resumeContent: firstMarkdownText,
+      originalRefId: firstOriginalRefId
+    }
+  } catch (error) {
+    uploadProgress.set(conversationId, { progress: 0, status: '失败' })
+    setTimeout(() => uploadProgress.delete(conversationId), UPLOAD_PROGRESS_TTL)
+
+    if (conversationCreated) {
+      try {
+        await deleteConversation(conversationId)
+      } catch (cleanupError) {
+        logger.error('Failed to cleanup failed conversation start', {
+          conversationId,
+          error: cleanupError
+        })
       }
     }
-    await cleanupOldVersions(conversationId, 'original', MAX_FILE_VERSIONS)
-  }
-
-  report(100, '完成')
-  setTimeout(() => uploadProgress.delete(conversationId), UPLOAD_PROGRESS_TTL)
-
-  return {
-    conversationId,
-    initialPrompt,
-    resumeContent: firstMarkdownText,
-    originalRefId: firstOriginalRefId
+    throw error
   }
 }
