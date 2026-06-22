@@ -26,6 +26,10 @@ function createJsonResponseRecorder() {
   }
 }
 
+function createQueryRequest(query: Request['query']): Request & ValidatedQueryRequest {
+  return { query } as unknown as Request & ValidatedQueryRequest
+}
+
 describe('validateQuery', () => {
   it('should attach validated query to request', () => {
     const schema = z.object({
@@ -33,7 +37,7 @@ describe('validateQuery', () => {
       search: z.string().optional()
     })
     const middleware = validateQuery(schema)
-    const req = { query: { page: '2', search: 'resume' } } as Request & ValidatedQueryRequest
+    const req = createQueryRequest({ page: '2', search: 'resume' })
     const { response } = createJsonResponseRecorder()
     let called = false
 
@@ -50,7 +54,7 @@ describe('validateQuery', () => {
       page: z.coerce.number().int().min(1)
     })
     const middleware = validateQuery(schema)
-    const req = { query: { page: '0' } } as Request & ValidatedQueryRequest
+    const req = createQueryRequest({ page: '0' })
     const { response, getPayload, getStatusCode } = createJsonResponseRecorder()
 
     middleware(req, response, (() => {
