@@ -28,7 +28,6 @@ COPY --from=build-server /app/packages/shared/dist packages/shared/dist
 COPY --from=build-server /app/packages/web/package.json packages/web/package.json
 COPY --from=build-server /app/packages/server/dist packages/server/dist
 COPY --from=build-server /app/packages/server/src/db packages/server/src/db
-COPY --from=build-server /app/packages/server/scripts packages/server/scripts
 COPY --from=build-server /app/packages/server/drizzle.config.ts packages/server/drizzle.config.ts
 RUN pnpm install --frozen-lockfile --ignore-scripts --filter @resuchat/server...
 WORKDIR /app/packages/server

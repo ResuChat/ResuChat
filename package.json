@@ -24,7 +24,7 @@
     "format:check": "prettier --check .",
     "test": "pnpm --filter @resuchat/server test && pnpm --filter @resuchat/web test:run",
     "test:watch": "vitest",
-    "typecheck": "pnpm -r exec tsc --noEmit"
+    "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

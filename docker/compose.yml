@@ -45,7 +45,7 @@ services:
       EMBED_REMOTE_HOST: ${EMBED_REMOTE_HOST:-https://hf-mirror.com}
     ports:
       - '3000:3000'
-    command: ['sh', '-c', 'pnpm run db:push && node dist/index.js']
+    command: ['sh', '-c', 'pnpm run db:push:prod && node dist/index.js']
     volumes:
       - server-uploads:/app/packages/server/uploads
       - vector-data:/app/packages/server/data
@@ -70,7 +70,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
       target: server
-    command: ['sh', '-c', 'pnpm run db:push && node dist/workers/index.js']
+    command: ['sh', '-c', 'pnpm run db:push:prod && node dist/workers/index.js']
     environment:
       DATABASE_URL: postgresql://postgres@postgres:5432/resuchat
       USE_REDIS: 'true'

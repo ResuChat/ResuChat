@@ -7,8 +7,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
-    "build:analyze": "vue-tsc --noEmit && vite build --mode analyze",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "pnpm run typecheck && vite build",
+    "build:analyze": "pnpm run typecheck && vite build --mode analyze",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
