@@ -3,8 +3,13 @@ import { eq } from 'drizzle-orm'
 import { closeDb, db, schema } from '../src/lib/db'
 
 async function main() {
-  const phone = '***REMOVED***'
-  const newPassword = '***REMOVED***'
+  const phone = process.argv[2]
+  const newPassword = process.argv[3]
+  if (!phone || !newPassword) {
+    console.error('用法: pnpm vite-node scripts/reset-password.ts <手机号> <新密码>')
+    process.exit(1)
+  }
+
   const hash = await bcrypt.hash(newPassword, 10)
 
   const [user] = await db
