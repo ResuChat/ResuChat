@@ -279,7 +279,11 @@ watch(
   { immediate: true }
 )
 onUnmounted(() => {
-  pdfDoc?.cleanup()
+  const destroy = (pdfDoc as (pdfjsLib.PDFDocumentProxy & { destroy?: () => Promise<void> }) | null)
+    ?.destroy
+  if (destroy) void destroy.call(pdfDoc)
+  else pdfDoc?.cleanup()
+  pdfDoc = null
   if (pagesContainer.value) pagesContainer.value.innerHTML = ''
   thumbs.length = 0
 })
