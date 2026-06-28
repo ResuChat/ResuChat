@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { redis } from '../lib/redis'
+import { isRedisReady, redis } from '../lib/redis'
 import { CAPTCHA_TTL } from '../lib/config'
 import { generateCaptchaImage } from '../lib/captcha'
 
@@ -30,7 +30,7 @@ export async function createCaptcha(phone: string): Promise<{ key: string; image
   const text = crypto.randomInt(100000, 1000000).toString()
   const key = 'captcha:' + crypto.randomUUID()
 
-  if (redis) {
+  if (redis && isRedisReady()) {
     await redis.setex(key, CAPTCHA_TTL, JSON.stringify({ phone, text }))
   } else {
     inMemoryCaptcha[key] = { text, phone, expiresAt: Date.now() + CAPTCHA_TTL * 1000 }
@@ -52,7 +52,7 @@ export async function verifyAndConsumeCaptcha(
   let storedText: string | null = null
   let phone: string | null = null
 
-  if (redis) {
+  if (redis && isRedisReady()) {
     const raw = await redis.get(key)
     if (raw) {
       try {

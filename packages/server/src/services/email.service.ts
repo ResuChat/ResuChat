@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import { redis } from '../lib/redis'
+import { isRedisReady, redis } from '../lib/redis'
 import { EMAIL_CODE_TTL } from '../lib/config'
 import { emailQueue } from '../lib/queue'
 import { logger } from '../lib/logger'
@@ -23,7 +23,7 @@ export { emailCleanupInterval }
 export async function sendEmailCode(email: string): Promise<string> {
   const code = crypto.randomInt(100000, 1000000).toString()
   const key = 'emailcode:' + crypto.randomUUID()
-  if (redis) {
+  if (redis && isRedisReady()) {
     await redis.setex(key, EMAIL_CODE_TTL, JSON.stringify({ email, code }))
   } else {
     inMemoryCodes[key] = { email, code, expiresAt: Date.now() + EMAIL_CODE_TTL * 1000 }
@@ -40,7 +40,7 @@ export async function sendEmailCode(email: string): Promise<string> {
 
 export async function verifyEmailCode(key: string, code: string): Promise<boolean> {
   let storedCode: string | null = null
-  if (redis) {
+  if (redis && isRedisReady()) {
     const raw = await redis.get(key)
     if (raw) {
       try {
