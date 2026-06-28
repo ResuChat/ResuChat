@@ -1,6 +1,7 @@
 import { useWebSocket as _useWebSocket } from '@vueuse/core'
 import { ref } from 'vue'
 import { getAccessToken } from '@/lib/auth'
+import { logger } from '@/lib/logger'
 
 const devHost =
   location.hostname === 'localhost' ? '127.0.0.1:3000' : `${location.hostname || '127.0.0.1'}:3000`
@@ -18,10 +19,10 @@ if (token) wsUrl.value = `${proto}://${host}/ws?token=${token}`
 const { status, data, close } = _useWebSocket(wsUrl, {
   autoReconnect: { retries: 999, delay: 3000 },
   onConnected() {
-    console.log('[WS] Connected')
+    logger.debug('[WS] Connected')
   },
   onDisconnected() {
-    console.log('[WS] Disconnected')
+    logger.debug('[WS] Disconnected')
   },
   onMessage(_ws, event) {
     try {
