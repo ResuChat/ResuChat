@@ -14,8 +14,9 @@ import {
   createConversationOwnerGuard,
   createConversationParticipantGuard
 } from '../../services/document/conversation.service'
-import { validateBody } from '../../middleware/validate'
-import { StartConversationRequest } from '../../dto/conversation.dto'
+import { validateBody, validateParams, validateQuery } from '../../middleware/validate'
+import { MessagesQuery, StartConversationRequest } from '../../dto/conversation.dto'
+import { ConversationIdParam } from '../../dto/common.dto'
 
 const authenticate = createAuthWithUserMiddleware()
 const owner = createAuthWithUserMiddleware(createConversationOwnerGuard((req) => req.params.id))
@@ -35,7 +36,13 @@ router.post(
   start
 )
 router.post('/start-from-doc', validateBody(StartConversationRequest), authenticate, start)
-router.get('/:id/messages', owner, getMessages)
+router.get(
+  '/:id/messages',
+  validateParams(ConversationIdParam),
+  owner,
+  validateQuery(MessagesQuery),
+  getMessages
+)
 router.delete('/:id', owner, deleteConv)
 router.post('/:id/restore', participant, restoreConv)
 
