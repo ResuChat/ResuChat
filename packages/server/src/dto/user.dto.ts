@@ -37,3 +37,9 @@ export const ChangePasswordRequest = z.object({
 })
 
 export type ChangePasswordRequest = z.infer<typeof ChangePasswordRequest>
+
+export const NotificationsQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional()
+})
+
+export type NotificationsQuery = z.infer<typeof NotificationsQuery>

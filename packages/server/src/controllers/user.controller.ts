@@ -1,5 +1,6 @@
 import type { Request, RequestHandler, Response } from 'express'
 import type { AuthRequest } from '../middleware/auth'
+import type { ValidatedQueryRequest } from '../middleware/validate'
 import { ValidationError } from '../lib/errors'
 import {
   getProfile,

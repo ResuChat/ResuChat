@@ -1,8 +1,10 @@
 import type { Request, RequestHandler, Response } from 'express'
 import type { AuthRequest } from '../middleware/auth'
+import type { ValidatedQueryRequest } from '../middleware/validate'
 import { UnauthorizedError } from '../lib/errors'
 import { parsePageParams } from '../lib/pagination'
 import type { MulterFile } from '../lib/file-content'
+import type { MessagesQuery } from '../dto/conversation.dto'
 import { UPLOAD_TIMEOUT } from '../lib/config'
 import {
   deleteConversationById,
@@ -36,9 +38,11 @@ export const listDeletedConversations: RequestHandler = async (req: Request, res
 
 export const getMessages: RequestHandler = async (req: Request, res: Response) => {
   const conversationId = String(req.params.id)
-  const beforeId = req.query.before ? String(req.query.before) : undefined
-  const { page, pageSize } = parsePageParams(req.query, 100)
-  const order = (req.query.order as 'ASC' | 'DESC') || 'DESC'
+  const query = (req as ValidatedQueryRequest<MessagesQuery>).validatedQuery!
+  const beforeId = query.before
+  const page = query.page
+  const pageSize = query.pageSize ?? 100
+  const order = query.order
   const result = await getConversationMessages({
     conversationId,
     beforeId,
