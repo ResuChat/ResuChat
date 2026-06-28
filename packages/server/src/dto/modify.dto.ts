@@ -35,7 +35,7 @@ export type ModifyRequest = z.infer<typeof ModifyRequest>
 
 /** POST /modify/render-pdf 请求 */
 export const RenderPdfRequest = z.object({
-  markdown: z.string().min(1, 'markdown 不能为空')
+  markdown: z.string().min(1, 'markdown 不能为空').max(500000, 'markdown 超过长度限制')
 })
 
 export type RenderPdfRequest = z.infer<typeof RenderPdfRequest>
