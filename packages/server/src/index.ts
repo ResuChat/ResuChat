@@ -93,6 +93,10 @@ app.get('/', (req: Request, res: Response) => {
   res.json({ message: 'AI Agent BFF Layer Running' })
 })
 
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok' })
+})
+
 app.use('/admin', adminRoute)
 app.use('/auth', authRoute)
 app.use('/user', userRoute)

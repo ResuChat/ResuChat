@@ -45,7 +45,7 @@ services:
       EMBED_REMOTE_HOST: ${EMBED_REMOTE_HOST:-https://hf-mirror.com}
     ports:
       - '3000:3000'
-    command: ['sh', '-c', 'pnpm run db:push:prod && node dist/index.js']
+    command: ['sh', '-c', 'pnpm run db:migrate:prod && node dist/index.js']
     volumes:
       - server-uploads:/app/packages/server/uploads
       - vector-data:/app/packages/server/data
@@ -54,6 +54,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   web:
     build:
@@ -63,14 +75,20 @@ services:
     ports:
       - '5173:80'
     depends_on:
-      - server
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://localhost/ || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   worker:
     build:
       context: ..
       dockerfile: docker/Dockerfile
       target: server
-    command: ['sh', '-c', 'pnpm run db:push:prod && node dist/workers/index.js']
+    command: ['node', 'dist/workers/index.js']
     environment:
       DATABASE_URL: postgresql://postgres@postgres:5432/resuchat
       USE_REDIS: 'true'
@@ -86,6 +104,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', 'process.exit(0)']
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   postgres-data:
