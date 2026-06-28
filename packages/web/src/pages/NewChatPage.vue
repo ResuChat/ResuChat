@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Loading, Paperclip, Promotion } from '@element-plus/icons-vue'
@@ -127,6 +127,27 @@ const progress = ref(0)
 const statusText = ref('')
 const displayProgress = ref(0)
 const progressStageStartedAt = ref(Date.now())
+const activeTimers = new Set<number>()
+let finishProgressResolve: (() => void) | null = null
+
+function trackTimer(id: number) {
+  activeTimers.add(id)
+  return id
+}
+
+function clearTrackedTimer(id: number) {
+  window.clearInterval(id)
+  activeTimers.delete(id)
+}
+
+function clearAllTimers() {
+  for (const id of activeTimers) window.clearInterval(id)
+  activeTimers.clear()
+  finishProgressResolve?.()
+  finishProgressResolve = null
+}
+
+onUnmounted(clearAllTimers)
 
 function getDisplayProgressCap() {
   if (progress.value >= 100) return 100
@@ -142,9 +163,10 @@ function createConversationId() {
 }
 
 async function pollStartProgress(conversationId: string) {
-  const data = (await api.get(`/conversations/start/progress/${conversationId}`, {
+  const result = (await api.get(`/conversations/start/progress/${conversationId}`, {
     timeout: 10000
-  })) as { progress: number; status: string }
+  })) as { data: { progress: number; status: string } }
+  const data = result.data
 
   if (data.progress >= progress.value) {
     if (data.progress !== progress.value) {
@@ -237,12 +259,14 @@ async function handleStart() {
 
   const query = resolveStartConversationQuery(prompt.value)
   const conversationId = createConversationId()
-  const progressTimer = window.setInterval(() => {
-    pollStartProgress(conversationId).catch(() => {
-      /* 进度查询失败不打断主请求 */
-    })
-  }, 500)
-  const animationTimer = startProgressAnimation()
+  const progressTimer = trackTimer(
+    window.setInterval(() => {
+      pollStartProgress(conversationId).catch(() => {
+        /* 进度查询失败不打断主请求 */
+      })
+    }, 500)
+  )
+  const animationTimer = trackTimer(startProgressAnimation())
 
   try {
     const result = selectedDoc.value
@@ -252,7 +276,7 @@ async function handleStart() {
           {
             timeout: 240000
           }
-        )) as { conversationId: string; initialPrompt: string })
+        )) as { data: { conversationId: string; initialPrompt: string } })
       : await (async () => {
           const formData = new FormData()
           formData.append('conversationId', conversationId)
@@ -261,37 +285,41 @@ async function handleStart() {
           return (await api.post('/conversations/start', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 240000
-          })) as { conversationId: string; initialPrompt: string }
+          })) as { data: { conversationId: string; initialPrompt: string } }
         })()
 
-    window.clearInterval(progressTimer)
+    clearTrackedTimer(progressTimer)
     statusText.value = '完成'
     progress.value = 100
     await new Promise<void>((resolve) => {
-      const finishTimer = window.setInterval(() => {
-        if (displayProgress.value >= 99.9) {
-          displayProgress.value = 100
-          window.clearInterval(finishTimer)
-          resolve()
-          return
-        }
-        displayProgress.value = Math.min(
-          100,
-          Math.round(
-            (displayProgress.value + Math.max(0.5, (100 - displayProgress.value) / 8)) * 10
-          ) / 10
-        )
-      }, 16)
+      finishProgressResolve = resolve
+      const finishTimer = trackTimer(
+        window.setInterval(() => {
+          if (displayProgress.value >= 99.9) {
+            displayProgress.value = 100
+            clearTrackedTimer(finishTimer)
+            finishProgressResolve = null
+            resolve()
+            return
+          }
+          displayProgress.value = Math.min(
+            100,
+            Math.round(
+              (displayProgress.value + Math.max(0.5, (100 - displayProgress.value) / 8)) * 10
+            ) / 10
+          )
+        }, 16)
+      )
     })
-    window.clearInterval(animationTimer)
-    chatStore.setConversationId(result.conversationId)
-    chatStore.setPrompt(result.initialPrompt || query)
+    clearTrackedTimer(animationTimer)
+    chatStore.setConversationId(result.data.conversationId)
+    chatStore.setPrompt(result.data.initialPrompt || query)
     chatStore.fetchConversations(1, 50)
     await new Promise((resolve) => setTimeout(resolve, 500))
-    await router.push(`/app/chat/${result.conversationId}`)
+    await router.push(`/app/chat/${result.data.conversationId}`)
   } catch (error) {
-    window.clearInterval(progressTimer)
-    window.clearInterval(animationTimer)
+    clearTrackedTimer(progressTimer)
+    clearTrackedTimer(animationTimer)
     uploading.value = false
     ElMessage.error(getStartErrorMessage(error))
   }
