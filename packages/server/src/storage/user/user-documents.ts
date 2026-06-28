@@ -182,7 +182,10 @@ export async function listUserDocuments(
   const page = opts?.page || 1
   const pageSize = opts?.pageSize || 20
   const filters: SQL[] = [eq(schema.userDocuments.userId, userId)]
-  if (opts?.search) filters.push(ilike(schema.userDocuments.localName, `%${opts.search}%`))
+  if (opts?.search) {
+    const escapedSearch = opts.search.replace(/[%_\\]/g, '\\$&')
+    filters.push(ilike(schema.userDocuments.localName, `%${escapedSearch}%`))
+  }
   if (opts?.category) filters.push(eq(schema.userDocuments.category, opts.category))
   if (opts?.parseStatus) filters.push(eq(schema.userDocuments.parseStatus, opts.parseStatus))
   if (opts?.fileType) {

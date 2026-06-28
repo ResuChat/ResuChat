@@ -1,4 +1,6 @@
 import type { Request, RequestHandler, Response } from 'express'
+import fs from 'fs'
+import { pipeline } from 'node:stream/promises'
 import type { AuthRequest } from '../middleware/auth'
 import type { ValidatedQueryRequest } from '../middleware/validate'
 import { ValidationError } from '../lib/errors'
@@ -76,8 +78,7 @@ export const downloadUserDoc: RequestHandler = async (req: Request, res: Respons
     'Content-Disposition',
     `attachment; filename="${encodeURIComponent(file.originalName)}"`
   )
-  res.setHeader('Content-Length', file.buffer.length)
-  res.send(file.buffer)
+  await pipeline(fs.createReadStream(file.filePath), res)
 }
 
 export const retryParseUserDoc: RequestHandler = async (req: Request, res: Response) => {

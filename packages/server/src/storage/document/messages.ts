@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, lt } from 'drizzle-orm'
+import { and, asc, count, desc, eq, lt, or } from 'drizzle-orm'
 import { normalizeMessageAttachments } from '@resuchat/shared'
 import { db, schema } from '../../lib/db'
 import type { MessageAttachment, MessageRecord } from '../../types/domain'
@@ -155,7 +155,7 @@ export async function getMessagesBefore(
       .from(schema.messages)
       .where(eq(schema.messages.conversationId, conversationId)),
     db
-      .select({ createdAt: schema.messages.createdAt })
+      .select({ createdAt: schema.messages.createdAt, id: schema.messages.id })
       .from(schema.messages)
       .where(
         and(
@@ -178,7 +178,10 @@ export async function getMessagesBefore(
     .where(
       and(
         eq(schema.messages.conversationId, conversationId),
-        lt(schema.messages.createdAt, cursor.createdAt)
+        or(
+          lt(schema.messages.createdAt, cursor.createdAt),
+          and(eq(schema.messages.createdAt, cursor.createdAt), lt(schema.messages.id, cursor.id))
+        )
       )
     )
     .orderBy(desc(schema.messages.createdAt), desc(schema.messages.id))

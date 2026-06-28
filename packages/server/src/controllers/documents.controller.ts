@@ -1,5 +1,6 @@
 import type { Request, RequestHandler, Response } from 'express'
 import fs from 'fs'
+import { pipeline } from 'node:stream/promises'
 import { ValidationError } from '../lib/errors'
 import {
   getDocuments,
@@ -42,9 +43,7 @@ export const restoreDoc: RequestHandler = async (req: Request, res: Response) =>
 export const downloadDoc: RequestHandler = async (req: Request, res: Response) => {
   const refId = parseInt(req.params.refId as string)
   const { filePath, originalName } = await downloadDocument(refId)
-  const fileBuffer = fs.readFileSync(filePath)
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalName)}"`)
-  res.setHeader('Content-Length', fileBuffer.length)
-  res.send(fileBuffer)
+  await pipeline(fs.createReadStream(filePath), res)
 }

@@ -224,14 +224,14 @@ export async function resetPendingUserDocuments(): Promise<number> {
 export async function getUserDocumentDownloadInfo(
   userId: string,
   id: number
-): Promise<{ buffer: Buffer; originalName: string }> {
+): Promise<{ filePath: string; originalName: string }> {
   const doc = await getUserDocFileInfo(id)
   if (!doc || doc.userId !== userId || !fs.existsSync(doc.filePath)) {
     throw new NotFoundError('File not found')
   }
 
   return {
-    buffer: await fs.promises.readFile(doc.filePath),
+    filePath: doc.filePath,
     originalName: doc.originalName
   }
 }

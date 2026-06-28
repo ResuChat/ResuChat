@@ -26,6 +26,7 @@ import { extractPdfText } from '../../lib/pdf/extractor'
 import { logger } from '../../lib/logger'
 import { triggerAutoSummary } from '../chat/summary.service'
 import { db } from '../../lib/db'
+import { MAX_FILE_VERSIONS } from '../../lib/config'
 
 interface Optimization {
   field: string
@@ -117,7 +118,7 @@ export function createApplyStream(params: ApplyModificationParams) {
       const aiContent = sectionsToContentArray(sections)
 
       logger.debug('Apply modification PDF generation started', { conversationId, field })
-      const pdfBuffer = Buffer.from(await generateResumePDF(structuredClone(aiContent)))
+      const pdfBuffer = Buffer.from(await generateResumePDF(aiContent))
 
       const fileName = `resume_${Date.now()}.pdf`
       const preparedFile = prepareConversationFile(Buffer.from(pdfBuffer), 'pdf')
@@ -152,7 +153,7 @@ export function createApplyStream(params: ApplyModificationParams) {
             tx,
             conversationId,
             'modified',
-            5
+            MAX_FILE_VERSIONS
           )
 
           await setConversationChunksWithTypesInTransaction(
@@ -270,5 +271,5 @@ export async function renderResumePdf(markdown: string): Promise<Buffer> {
   }
   const sections = parseResumeSections(markdown)
   const contentArray = sectionsToContentArray(sections)
-  return Buffer.from(await generateResumePDF(structuredClone(contentArray)))
+  return Buffer.from(await generateResumePDF(contentArray))
 }

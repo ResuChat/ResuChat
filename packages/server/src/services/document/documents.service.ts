@@ -17,6 +17,7 @@ import {
 import { extractPdfText } from '../../lib/pdf/extractor'
 import { triggerAutoSummary } from '../chat/summary.service'
 import { createOwnerGuard, type AuthGuard, type OwnerIdGetter } from '../../middleware/authGuard'
+import { MAX_FILE_VERSIONS } from '../../lib/config'
 
 export async function isConversationDocumentOwnedByUser(
   refId: string,
@@ -123,7 +124,7 @@ async function restoreDocumentFromRef(
   triggerAutoSummary(ref.conversation_id)
 
   const aiContent = parseAIContent(fullText)
-  const newPdf = await generateResumePDF(structuredClone(aiContent))
+  const newPdf = await generateResumePDF(aiContent)
   const fileName = `resume_restored_${Date.now()}.pdf`
   const fileResult = await addFileToConversation(
     ref.conversation_id,
@@ -134,7 +135,7 @@ async function restoreDocumentFromRef(
     undefined,
     fullText
   )
-  await cleanupOldVersions(ref.conversation_id, 'modified', 5)
+  await cleanupOldVersions(ref.conversation_id, 'modified', MAX_FILE_VERSIONS)
 
   return {
     downloadUrl: `/documents/${fileResult.refId}/download`,
