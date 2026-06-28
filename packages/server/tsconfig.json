@@ -9,7 +9,7 @@
     "declarationMap": false,
     "sourceMap": true,
     "rootDir": "./src",
-    "types": ["vitest/globals"]
+    "types": ["node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "src/generated"]
