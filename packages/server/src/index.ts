@@ -204,6 +204,13 @@ export async function start() {
     }
   }
 
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled rejection', { reason })
+  })
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception', { error })
+    void gracefulShutdown('uncaughtException')
+  })
   process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'))
   process.on('SIGINT', () => void gracefulShutdown('SIGINT'))
 

@@ -267,4 +267,11 @@ if (isMainModule) {
 
   process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'))
   process.on('SIGINT', () => void gracefulShutdown('SIGINT'))
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Queue unhandled rejection', { reason })
+  })
+  process.on('uncaughtException', (error) => {
+    logger.error('Queue uncaught exception', { error })
+    void gracefulShutdown('uncaughtException')
+  })
 }
