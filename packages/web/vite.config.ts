@@ -8,6 +8,25 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { visualizer } from 'rollup-plugin-visualizer'
 
 export default defineConfig(({ mode }) => {
+  const manualChunks = (id: string): string | undefined => {
+    const normalizedId = id.replaceAll('\\', '/')
+    if (normalizedId.includes('/node_modules/pdfjs-dist/')) return 'vendor-pdfjs'
+    if (normalizedId.includes('/node_modules/element-plus/')) return 'vendor-element-plus'
+    if (
+      normalizedId.includes('/node_modules/ai/') ||
+      normalizedId.includes('/node_modules/@ai-sdk/vue/')
+    ) {
+      return 'vendor-ai'
+    }
+    if (
+      normalizedId.includes('/node_modules/marked/') ||
+      normalizedId.includes('/node_modules/dompurify/')
+    ) {
+      return 'vendor-markdown'
+    }
+    return undefined
+  }
+
   const plugins: PluginOption[] = [
     vue(),
     tailwindcss(),
@@ -42,6 +61,14 @@ export default defineConfig(({ mode }) => {
       }
     },
     define: { global: 'globalThis' },
+    build: {
+      sourcemap: 'hidden',
+      rolldownOptions: {
+        output: {
+          manualChunks
+        }
+      }
+    },
     server: {
       proxy: {
         '/api': {
