@@ -85,7 +85,14 @@ app.use(express.json({ limit: BODY_LIMIT }))
 app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }))
 
 // 静态文件服务：头像
-app.use('/avatars', express.static(path.join(process.cwd(), 'uploads', 'avatars')))
+app.use(
+  '/avatars',
+  express.static(path.join(process.cwd(), 'uploads', 'avatars'), {
+    setHeaders: (res) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+    }
+  })
+)
 
 app.use(httpLogger)
 

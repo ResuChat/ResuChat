@@ -52,12 +52,31 @@ export async function changePassword(userId: string, currentPassword: string, ne
   await updateUserPassword(userId, await hashPassword(newPassword))
 }
 
-export async function uploadAvatar(userId: string, file: { buffer: Buffer; originalname: string }) {
+export async function uploadAvatar(
+  userId: string,
+  file: { buffer: Buffer; originalname: string; mimetype?: string }
+) {
+  const allowedAvatarMimeByExt: Record<string, string[]> = {
+    '.png': ['image/png'],
+    '.jpg': ['image/jpeg'],
+    '.jpeg': ['image/jpeg'],
+    '.webp': ['image/webp']
+  }
+  const originalBase = path.basename(file.originalname)
+  const ext = path.extname(originalBase).toLowerCase()
+  const expectedMimes = allowedAvatarMimeByExt[ext]
+  if (!expectedMimes) {
+    throw new ValidationError('头像仅支持 png/jpg/webp 格式')
+  }
+  const actualMime = file.mimetype?.split(';')[0]?.trim().toLowerCase()
+  if (actualMime && !expectedMimes.includes(actualMime)) {
+    throw new ValidationError('文件扩展名与 MIME 类型不匹配')
+  }
+
   const hash = crypto.createHash('sha256').update(file.buffer).digest('hex').slice(0, 16)
-  const ext = file.originalname.split('.').pop()?.toLowerCase() || 'png'
   const avatarDir = path.join(process.cwd(), 'uploads', 'avatars')
   if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir, { recursive: true })
-  const filename = `avatar_${hash}.${ext}`
+  const filename = `avatar_${hash}${ext}`
   const filepath = path.join(avatarDir, filename)
   if (!fs.existsSync(filepath)) fs.writeFileSync(filepath, file.buffer)
 
