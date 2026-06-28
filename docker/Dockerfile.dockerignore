@@ -12,5 +12,9 @@ packages/*/node_modules
 packages/*/dist
 packages/server/uploads
 packages/server/temp
+packages/server/data
+packages/server/logs
 packages/server/src/generated
+packages/*/tsconfig.tsbuildinfo
+*.tsbuildinfo
 data

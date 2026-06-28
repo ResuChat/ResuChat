@@ -29,7 +29,10 @@ COPY --from=build-server /app/packages/web/package.json packages/web/package.jso
 COPY --from=build-server /app/packages/server/dist packages/server/dist
 COPY --from=build-server /app/packages/server/src/db packages/server/src/db
 COPY --from=build-server /app/packages/server/drizzle.config.ts packages/server/drizzle.config.ts
-RUN pnpm install --frozen-lockfile --ignore-scripts --filter @resuchat/server...
+COPY --from=build-server /app/packages/server/drizzle packages/server/drizzle
+RUN pnpm install --frozen-lockfile --ignore-scripts --prod --filter @resuchat/server...
+RUN mkdir -p /app/packages/server/uploads /app/packages/server/data && chown -R node:node /app
+USER node
 WORKDIR /app/packages/server
 EXPOSE 3000
 CMD ["node", "dist/index.js"]

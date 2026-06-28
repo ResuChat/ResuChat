@@ -8,7 +8,7 @@
     "build": "pnpm run typecheck && tsdown",
     "start": "node dist/index.js",
     "db:push": "drizzle-kit push --config drizzle.config.ts && pnpm run db:views",
-    "db:push:prod": "drizzle-kit push --config drizzle.config.ts && pnpm run db:views:prod",
+    "db:migrate:prod": "drizzle-kit migrate --config drizzle.config.ts && pnpm run db:views:prod",
     "db:views": "vite-node --config vite.config.ts scripts/sync-drizzle-views.ts",
     "db:views:prod": "node dist/scripts/sync-drizzle-views.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json --noEmit",
