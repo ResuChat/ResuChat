@@ -23,7 +23,7 @@
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/test-utils": "^2.4.8",
     "eslint-plugin-vue": "^10.9.0",
-    "globals": "^17.6.0",
+    "globals": "catalog:",
     "jsdom": "^27.0.1",
     "postcss": "^8.5.10",
     "postcss-less": "^6.0.0",
@@ -41,7 +41,7 @@
     "@ai-sdk/vue": "^3.0.168",
     "@resuchat/shared": "workspace:*",
     "@vueuse/core": "^14.3.0",
-    "ai": "^6.0.168",
+    "ai": "catalog:",
     "axios": "^1.15.2",
     "dayjs": "^1.11.21",
     "dompurify": "^3.4.8",
@@ -52,6 +52,6 @@
     "pinia-plugin-persistedstate": "^4.7.1",
     "vue": "^3.5.33",
     "vue-router": "^4.6.4",
-    "zod": "^4.3.6"
+    "zod": "catalog:"
   }
 }
