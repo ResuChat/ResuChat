@@ -1,4 +1,5 @@
 import { Worker, type Job } from 'bullmq'
+import type { Transporter } from 'nodemailer'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import {
@@ -6,6 +7,10 @@ import {
   LOGIN_HISTORY_PURGE_INTERVAL_MS,
   LOGIN_HISTORY_RETENTION_MS,
   REDIS_URL,
+  SMTP_HOST,
+  SMTP_PASS,
+  SMTP_PORT,
+  SMTP_USER,
   SHUTDOWN_TIMEOUT
 } from '../lib/config'
 import {
@@ -22,14 +27,29 @@ import { closeDb } from '../lib/db'
 import { purgeExpiredDeletedConversations } from '../services/document/conversation.service'
 import { resetStuckStreamingMessages } from '../services/chat/stream-persistence.service'
 import { deleteLoginHistoryBefore } from '../storage/user/users'
+import { validateSmtpConfig } from '../lib/startup'
 
 const connection = { url: REDIS_URL }
 const workers: Worker[] = []
 let startupPromise: Promise<void> | null = null
 let conversationTrashPurgeInterval: NodeJS.Timeout | null = null
 let loginHistoryPurgeInterval: NodeJS.Timeout | null = null
+let emailTransporter: Transporter | null = null
 
 type SystemDocIndexJob = { systemDocId: number }
+
+async function getEmailTransporter(): Promise<Transporter> {
+  if (emailTransporter) return emailTransporter
+  const nodemailer = await import('nodemailer')
+  emailTransporter = nodemailer.default.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: false,
+    auth: { user: SMTP_USER, pass: SMTP_PASS }
+  })
+  emailTransporter.on('error', (error) => logger.error('Email transporter error', { error }))
+  return emailTransporter
+}
 
 function registerWorker(worker: Worker) {
   worker.on('completed', (job) => {
@@ -103,14 +123,7 @@ function registerWorkers(): void {
       async (job: Job<{ to: string; subject: string; text: string; html: string }>) => {
         const { to, subject, text, html } = job.data
         logger.info('Queue email sending', { to, subject })
-        const nodemailer = await import('nodemailer')
-        const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = await import('../lib/config')
-        const transporter = nodemailer.default.createTransport({
-          host: SMTP_HOST,
-          port: SMTP_PORT,
-          secure: false,
-          auth: { user: SMTP_USER, pass: SMTP_PASS }
-        })
+        const transporter = await getEmailTransporter()
         const info = await transporter.sendMail({ from: SMTP_USER, to, subject, text, html })
         logger.info('Queue email sent', { to, messageId: info.messageId })
       },
@@ -198,6 +211,7 @@ export async function startWorkers(): Promise<void> {
   if (startupPromise) return await startupPromise
 
   startupPromise = (async () => {
+    validateSmtpConfig()
     registerWorkers()
     logger.info('Queue workers started')
     await runWorkerStartupTasks()
