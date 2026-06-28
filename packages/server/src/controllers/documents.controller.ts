@@ -15,13 +15,13 @@ export const listDocs: RequestHandler = async (req: Request, res: Response) => {
     throw new ValidationError('conversationId is required')
   }
   const docs = await getDocuments(conversationId as string)
-  res.json({ docs })
+  res.json({ data: docs })
 }
 
 export const docHistory: RequestHandler = async (req: Request, res: Response) => {
   const conversationId = String(req.params.conversationId)
   const versions = await getHistory(conversationId)
-  res.json({ versions })
+  res.json({ data: versions })
 }
 
 export const removeDoc: RequestHandler = async (req: Request, res: Response) => {

@@ -172,9 +172,9 @@ async function onAvatarChange(e: Event) {
   try {
     const res = (await api.post('/user/avatar', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
-    })) as { avatar: string }
-    form.value.avatar = res.avatar
-    if (userStore.userInfo) userStore.userInfo.avatar = res.avatar
+    })) as { data: { avatar: string } }
+    form.value.avatar = res.data.avatar
+    if (userStore.userInfo) userStore.userInfo.avatar = res.data.avatar
     ElMessage.success('头像已更新')
   } catch {
     ElMessage.error('上传失败')

@@ -6,6 +6,7 @@ export type {
   DocumentRecord,
   UserRole,
   UserProfile,
+  UserProfileResponse,
   UserNotificationRecord,
   UserNotificationsResponse,
   ConversationsResponse,
@@ -15,7 +16,10 @@ export type {
   SystemDocumentRecord,
   SystemDocumentGroup,
   AuthTokens,
+  EmailCodeResponse,
+  LoginData,
   LoginResponse,
+  RegisterData,
   RegisterResponse,
   RefreshResponse
 } from '@resuchat/shared'

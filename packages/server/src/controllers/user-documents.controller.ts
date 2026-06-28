@@ -28,7 +28,7 @@ export const uploadUserDoc: RequestHandler = async (req: Request, res: Response)
     decodeFilename(file.originalname),
     file.mimetype
   )
-  res.json({ message: 'Uploaded successfully', id: result.id })
+  res.json({ message: 'Uploaded successfully', data: { id: result.id } })
 }
 
 export const listUserDocs: RequestHandler = async (req: Request, res: Response) => {

@@ -14,10 +14,23 @@ export type { MessageAttachment, MessageRecord, Conversation } from './domain/ch
 export { normalizeMessageAttachments } from './domain/chat'
 
 // API contract types
-export type { AuthTokens, RegisterResponse, LoginResponse, RefreshResponse } from './api/auth'
+export type {
+  AuthTokens,
+  EmailCodeResponse,
+  LoginData,
+  RegisterData,
+  RegisterResponse,
+  LoginResponse,
+  RefreshResponse
+} from './api/auth'
 
 export type { ConversationsResponse, ConversationMessagesResponse } from './api/conversation'
 
-export type { UserProfile, UserNotificationRecord, UserNotificationsResponse } from './api/user'
+export type {
+  UserProfile,
+  UserProfileResponse,
+  UserNotificationRecord,
+  UserNotificationsResponse
+} from './api/user'
 
 export type { SystemDocumentRecord, SystemDocumentGroup } from './api/system-knowledge'

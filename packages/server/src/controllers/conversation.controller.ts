@@ -69,8 +69,8 @@ export const restoreConv: RequestHandler = async (req: Request, res: Response) =
 
 export async function getProgress(req: Request, res: Response) {
   const data = uploadProgress.get(String(req.params.convId))
-  if (!data) return res.json({ progress: 0, status: '等待开始...' })
-  res.json(data)
+  if (!data) return res.json({ data: { progress: 0, status: '等待开始...' } })
+  res.json({ data })
 }
 
 export const start: RequestHandler = async (req: Request, res: Response) => {
@@ -87,5 +87,5 @@ export const start: RequestHandler = async (req: Request, res: Response) => {
   }
 
   const result = await startConversation(files, query, userId, undefined, docId, conversationId)
-  res.json(result)
+  res.json({ data: result })
 }

@@ -176,8 +176,8 @@ async function fetchRegCaptcha() {
 
 async function sendCode() {
   try {
-    const { key } = await sendEmailCode(account.value)
-    emailKey = key
+    const res = await sendEmailCode(account.value)
+    emailKey = res.data.key
     sending.value = true
     countdown.value = 60
     resumeLogin()
@@ -188,8 +188,8 @@ async function sendCode() {
 }
 async function sendRegCode() {
   try {
-    const { key } = await sendEmailCode(regEmail.value)
-    regEmailKey = key
+    const res = await sendEmailCode(regEmail.value)
+    regEmailKey = res.data.key
     regSending.value = true
     regCountdown.value = 60
     resumeReg()
@@ -220,7 +220,7 @@ async function doPasswordLogin() {
           email: account.value,
           password: password.value
         })
-    saveAuth(res.accessToken, res.refreshToken, isPhone.value ? account.value : null)
+    saveAuth(res.data.accessToken, res.data.refreshToken, isPhone.value ? account.value : null)
     router.push('/app/chat')
   } catch (error: unknown) {
     ElMessage.error(getErrorMessage(error, '登录失败'))
@@ -235,7 +235,7 @@ async function doEmailCodeLogin() {
       code: emailCode.value,
       key: emailKey
     })
-    saveAuth(res.accessToken, res.refreshToken)
+    saveAuth(res.data.accessToken, res.data.refreshToken)
     router.push('/app/chat')
   } catch (error: unknown) {
     ElMessage.error(getErrorMessage(error, '登录失败'))
@@ -252,7 +252,7 @@ async function doRegister() {
       captchaCode: regCaptcha.value,
       captchaKey: regCaptchaKey
     })
-    saveAuth(res.accessToken, res.refreshToken)
+    saveAuth(res.data.accessToken, res.data.refreshToken)
     router.push('/app/chat')
   } catch (error: unknown) {
     ElMessage.error(getErrorMessage(error, '注册失败'))

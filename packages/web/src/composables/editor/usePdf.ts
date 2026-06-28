@@ -39,7 +39,7 @@ export function useEditorPdf(
     refFilesLoading.value = true
     try {
       const result = await getReferenceFiles(conversationId.value)
-      chatStore.referenceFiles = result.docs || []
+      chatStore.referenceFiles = result.data || []
     } catch (e) {
       console.error('Failed to load reference files:', e)
     } finally {
@@ -51,7 +51,7 @@ export function useEditorPdf(
     if (!conversationId.value) return
     try {
       const result = await getDocHistory(conversationId.value)
-      chatStore.docVersions = result.versions || []
+      chatStore.docVersions = result.data || []
       chatStore.activeVersionIdx = chatStore.docVersions.length - 1
     } catch (e) {
       console.error('Failed to load doc history:', e)

@@ -1,10 +1,14 @@
 import { api } from './client'
 import { getRefreshToken } from '@/lib/auth'
-import type { UserNotificationRecord, UserNotificationsResponse, UserProfile } from '@/types/api'
+import type {
+  UserNotificationRecord,
+  UserNotificationsResponse,
+  UserProfileResponse
+} from '@/types/api'
 import { logoutWithRefreshToken } from './auth'
 
-export async function getUserProfile(): Promise<UserProfile> {
-  return api.get<UserProfile, UserProfile>('/user/profile')
+export async function getUserProfile(): Promise<UserProfileResponse> {
+  return api.get<UserProfileResponse, UserProfileResponse>('/user/profile')
 }
 
 export async function logout(): Promise<{ message: string } | void> {
@@ -39,6 +43,9 @@ export async function markUserNotificationRead(
   return api.patch(`/user/notifications/${id}/read`)
 }
 
-export async function markAllUserNotificationsRead(): Promise<{ message: string; count: number }> {
+export async function markAllUserNotificationsRead(): Promise<{
+  message: string
+  data: { count: number }
+}> {
   return api.patch('/user/notifications/read-all')
 }

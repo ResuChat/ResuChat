@@ -19,7 +19,7 @@ export async function generateCaptcha(req: Request, res: Response) {
 export async function sendEmailVerificationCode(req: Request, res: Response) {
   const { email } = req.body
   const key = await sendEmailCode(email)
-  res.json({ message: 'Verification code sent', key })
+  res.json({ message: 'Verification code sent', data: { key } })
 }
 
 export async function register(req: Request, res: Response) {
@@ -34,7 +34,7 @@ export async function register(req: Request, res: Response) {
     ip: req.ip || req.socket.remoteAddress,
     userAgent: req.headers['user-agent'] as string
   })
-  res.json({ message: 'Registration successful', ...result })
+  res.json({ message: 'Registration successful', data: result })
 }
 
 export async function login(req: Request, res: Response) {
@@ -43,7 +43,7 @@ export async function login(req: Request, res: Response) {
     ip: req.ip || req.socket.remoteAddress,
     userAgent: req.headers['user-agent'] as string
   })
-  res.json({ message: 'Login successful', ...result })
+  res.json({ message: 'Login successful', data: result })
 }
 
 export async function refresh(req: Request, res: Response) {

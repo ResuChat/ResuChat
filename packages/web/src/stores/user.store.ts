@@ -22,7 +22,7 @@ export const useUserStore = defineStore(
       if (userInfo.value?.role && !force) return userInfo.value
       userLoading.value = true
       try {
-        const data = await getUserProfile()
+        const { data } = await getUserProfile()
         userInfo.value = data
         return data
       } finally {
@@ -49,8 +49,8 @@ export const useUserStore = defineStore(
 
     async function fetchNotifications() {
       const result = await getUserNotifications()
-      notifications.value = result.data
-      unreadNotificationCount.value = result.unreadCount
+      notifications.value = result.data.notifications
+      unreadNotificationCount.value = result.data.unreadCount
       return result
     }
 

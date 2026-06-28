@@ -1,6 +1,6 @@
 import { api } from './client'
 import { saveAuth as persistAuth } from '@/lib/auth'
-import type { LoginResponse, RegisterResponse } from '@/types/api'
+import type { EmailCodeResponse, LoginResponse, RegisterResponse } from '@/types/api'
 
 export type LoginRequest =
   | {
@@ -29,11 +29,8 @@ export interface RegisterRequest {
   captchaKey: string
 }
 
-export async function sendEmailCode(email: string): Promise<{ key: string }> {
-  return api.post<{ message: string; key: string }, { message: string; key: string }>(
-    '/auth/send-email-code',
-    { email }
-  )
+export async function sendEmailCode(email: string): Promise<EmailCodeResponse> {
+  return api.post<EmailCodeResponse, EmailCodeResponse>('/auth/send-email-code', { email })
 }
 
 export async function register(data: RegisterRequest): Promise<RegisterResponse> {

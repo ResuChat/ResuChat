@@ -22,6 +22,12 @@ export interface UserNotificationRecord {
 }
 
 export interface UserNotificationsResponse {
-  data: UserNotificationRecord[]
-  unreadCount: number
+  data: {
+    notifications: UserNotificationRecord[]
+    unreadCount: number
+  }
+}
+
+export interface UserProfileResponse {
+  data: UserProfile
 }

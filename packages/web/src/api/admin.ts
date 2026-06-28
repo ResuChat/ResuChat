@@ -9,10 +9,12 @@ export async function listSystemDocuments(): Promise<{ data: SystemDocumentRecor
 
 export async function uploadSystemDocument(formData: FormData): Promise<{
   message: string
-  globalDocId: number
-  systemDocId: number
-  jobId: string
-  indexStatus: 'pending' | 'indexing' | 'done' | 'failed'
+  data: {
+    globalDocId: number
+    systemDocId: number
+    jobId: string
+    indexStatus: 'pending' | 'indexing' | 'done' | 'failed'
+  }
 }> {
   return api.post('/admin/system-documents', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }

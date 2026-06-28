@@ -29,7 +29,7 @@ export const uploadDoc: RequestHandler = async (req: Request, res: Response) => 
     groupId,
     file.mimetype
   )
-  res.status(202).json({ message: 'System document queued', ...result })
+  res.status(202).json({ message: 'System document queued', data: result })
 }
 
 export const deleteDoc: RequestHandler = async (req: Request, res: Response) => {

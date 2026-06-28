@@ -1,8 +1,8 @@
 import { api } from './client'
 import type { DocVersion, ReferenceDoc } from '@/types/api'
 
-export async function getReferenceFiles(conversationId: string): Promise<{ docs: ReferenceDoc[] }> {
-  return api.get<{ docs: ReferenceDoc[] }, { docs: ReferenceDoc[] }>('/documents', {
+export async function getReferenceFiles(conversationId: string): Promise<{ data: ReferenceDoc[] }> {
+  return api.get<{ data: ReferenceDoc[] }, { data: ReferenceDoc[] }>('/documents', {
     params: { conversationId }
   })
 }
@@ -11,8 +11,8 @@ export async function deleteReferenceFile(conversationId: string, refId: number)
   return api.delete<void, void>(`/documents/${refId}`, { params: { conversationId } })
 }
 
-export async function getDocHistory(conversationId: string): Promise<{ versions: DocVersion[] }> {
-  return api.get<{ versions: DocVersion[] }, { versions: DocVersion[] }>(
+export async function getDocHistory(conversationId: string): Promise<{ data: DocVersion[] }> {
+  return api.get<{ data: DocVersion[] }, { data: DocVersion[] }>(
     `/documents/${conversationId}/history`
   )
 }

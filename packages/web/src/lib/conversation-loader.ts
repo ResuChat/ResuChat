@@ -36,7 +36,7 @@ export function buildConversationSnapshot(
   conversations: Conversation[],
   conversationId: string
 ): ConversationSnapshot {
-  const data = result.data ?? result
+  const data = result.data
   const apiMessages = (data.messages ?? []).reverse()
   const documents = data.documents ?? []
 

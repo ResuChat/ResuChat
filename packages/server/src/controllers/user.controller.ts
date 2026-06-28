@@ -14,10 +14,15 @@ import {
   markAllUserNotificationsRead,
   markUserNotificationRead
 } from '../storage/user/notifications'
-import type { UpdateProfileRequest, BindPhoneRequest, ChangePasswordRequest } from '../dto/user.dto'
+import type {
+  UpdateProfileRequest,
+  BindPhoneRequest,
+  ChangePasswordRequest,
+  NotificationsQuery
+} from '../dto/user.dto'
 
 export const profile: RequestHandler = async (req: Request, res: Response) => {
-  res.json(await getProfile((req as AuthRequest).auth!.userId))
+  res.json({ data: await getProfile((req as AuthRequest).auth!.userId) })
 }
 
 export const update: RequestHandler = async (req: Request, res: Response) => {
@@ -40,13 +45,13 @@ export const avatar: RequestHandler = async (req: Request, res: Response) => {
   const file = req.file
   if (!file) throw new ValidationError('No file')
   const url = await uploadAvatar((req as AuthRequest).auth!.userId, file)
-  res.json({ avatar: url })
+  res.json({ data: { avatar: url } })
 }
 
 export const notifications: RequestHandler = async (req: Request, res: Response) => {
-  const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined
-  const result = await listUserNotifications((req as AuthRequest).auth!.userId, limitRaw)
-  res.json(result)
+  const { limit } = (req as ValidatedQueryRequest<NotificationsQuery>).validatedQuery!
+  const result = await listUserNotifications((req as AuthRequest).auth!.userId, limit)
+  res.json({ data: { notifications: result.data, unreadCount: result.unreadCount } })
 }
 
 export const notificationRead: RequestHandler = async (req: Request, res: Response) => {
@@ -58,5 +63,5 @@ export const notificationRead: RequestHandler = async (req: Request, res: Respon
 
 export const notificationsReadAll: RequestHandler = async (req: Request, res: Response) => {
   const count = await markAllUserNotificationsRead((req as AuthRequest).auth!.userId)
-  res.json({ message: 'Notifications read', count })
+  res.json({ message: 'Notifications read', data: { count } })
 }
