@@ -38,7 +38,7 @@
         <div
           v-if="content"
           :class="{ 'streaming-cursor': isLoading && isLast && msg.status !== 'interrupted' }"
-          v-html="renderMarkdown(content)"
+          v-html="renderedContent"
         />
         <!-- streaming 状态 -->
         <div
@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { Document, Loading } from '@element-plus/icons-vue'
 import { renderSafeMarkdown } from '@/lib/markdown'
 import type { Message, MessageAttachment } from '@/types/chat'
@@ -110,6 +110,8 @@ defineEmits<{ toggleReasoning: [msgId: string] }>()
 function renderMarkdown(text: string) {
   return renderSafeMarkdown(text)
 }
+
+const renderedContent = computed(() => renderMarkdown(props.content))
 
 function attachmentKey(attachment: MessageAttachment) {
   return `${attachment.source}-${attachment.refId ?? attachment.docId ?? attachment.name}`
