@@ -1,4 +1,4 @@
-import { shallowRef, watch, type Ref } from 'vue'
+import { onScopeDispose, shallowRef, watch, type Ref } from 'vue'
 import { Chat } from '@ai-sdk/vue'
 import type { UIMessage } from 'ai'
 import { getConversationMessages } from '@/api/conversation'
@@ -36,7 +36,7 @@ export function useEditorChat(options: UseEditorChatOptions) {
   const chatStore = useChatStore()
   const showReasoningMap = new Map<string, boolean>()
   const chat = shallowRef<Chat<UIMessage>>()
-  let _transport!: MultipartChatTransport<UIMessage>
+  let _transport: MultipartChatTransport<UIMessage> | null = null
   let chatWatchHandle: (() => void) | null = null
 
   const fetchWithAuth: typeof fetch = async (input, init) => {
@@ -46,11 +46,11 @@ export function useEditorChat(options: UseEditorChatOptions) {
   }
 
   function initChat(historyMessages?: UIMessage[]) {
-    console.log('[initChat] called, historyMessages:', JSON.stringify(historyMessages))
     if (chatWatchHandle) {
       chatWatchHandle()
       chatWatchHandle = null
     }
+    _transport?.stop()
 
     _transport = new MultipartChatTransport({
       fetch: fetchWithAuth
@@ -145,13 +145,6 @@ export function useEditorChat(options: UseEditorChatOptions) {
         Promise.resolve().then(() => options.dequeue())
       }
     })
-    console.log('[initChat] Chat instance:', chat.value)
-    console.log('[initChat] Chat messages:', chat.value.messages)
-    console.log(
-      '[initChat] Chat messages type:',
-      typeof chat.value.messages,
-      Array.isArray(chat.value.messages)
-    )
 
     chatWatchHandle = watch(
       () => {
@@ -164,12 +157,6 @@ export function useEditorChat(options: UseEditorChatOptions) {
       },
       (signature, previousSignature) => {
         const sdkMessages = chat.value?.messages
-        console.log(
-          '[chat watch] messages changed, length:',
-          sdkMessages?.length,
-          'isArray:',
-          Array.isArray(sdkMessages)
-        )
         if (!sdkMessages || sdkMessages.length === 0) return
 
         let changed = false
@@ -200,10 +187,18 @@ export function useEditorChat(options: UseEditorChatOptions) {
     }
   }
 
+  onScopeDispose(() => {
+    chatWatchHandle?.()
+    chatWatchHandle = null
+    _transport?.stop()
+    _transport = null
+    chat.value = undefined
+  })
+
   return {
     chat,
     get transport() {
-      return _transport
+      return _transport!
     },
     initChat,
     showReasoningMap,
