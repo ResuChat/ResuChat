@@ -17,20 +17,23 @@
     "build:shared": "pnpm --filter @resuchat/shared build",
     "build:server": "pnpm run build:shared && pnpm --filter @resuchat/server build",
     "build:web": "pnpm --filter @resuchat/web build",
-    "build": "pnpm run build:shared && pnpm --filter @resuchat/server build && pnpm --filter @resuchat/web build",
-    "lint": "eslint .",
+    "build": "pnpm run build:shared && pnpm -r --parallel --filter @resuchat/server --filter @resuchat/web build",
+    "lint": "pnpm -r lint",
     "lint:packages": "pnpm -r lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm --filter @resuchat/server test && pnpm --filter @resuchat/web test:run",
     "test:watch": "vitest",
-    "typecheck": "pnpm -r run typecheck"
+    "typecheck": "pnpm -r run typecheck",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.4.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "prettier": "^3.8.3",
     "tsdown": "^0.22.3",
     "typescript": "^6.0.3",
@@ -41,11 +44,18 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "canvas",
+      "bcrypt",
       "esbuild",
       "onnxruntime-node",
-      "sharp",
-      "ws"
+      "sharp"
+    ]
+  },
+  "lint-staged": {
+    "*.{ts,vue}": [
+      "eslint --fix"
+    ],
+    "*.{ts,vue,json,md,yml}": [
+      "prettier --write"
     ]
   }
 }
